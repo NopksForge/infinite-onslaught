@@ -2,6 +2,7 @@ package config
 
 import (
 	"log/slog"
+	"time"
 
 	"github.com/caarlos0/env/v11"
 )
@@ -11,6 +12,7 @@ type Config struct {
 	AccessControl  AccessControl
 	Cache          Cache
 	RefIDHeaderKey string `env:"REF_ID_HEADER_KEY"`
+	LLM            LLM    `envPrefix:"LLM_"`
 }
 
 type Server struct {
@@ -24,6 +26,12 @@ type AccessControl struct {
 
 type Cache struct {
 	RedisURL string `env:"REDIS_URL"`
+}
+
+type LLM struct {
+	Endpoint string        `env:"ENDPOINT"`
+	Model    string        `env:"MODEL"`
+	Timeout  time.Duration `env:"TIMEOUT"`
 }
 
 func C() Config {

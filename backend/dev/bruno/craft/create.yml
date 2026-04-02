@@ -1,0 +1,43 @@
+info:
+  name: create
+  type: http
+  seq: 1
+
+http:
+  method: POST
+  url: "{{baseUrl}}/craft"
+  headers:
+    - name: X-Reference-Id
+      value: "{{randRefID}}"
+  body:
+    type: json
+    data: |-
+      {
+        "item1_name": "Dust Storm",
+        "item2_name": "Fire"
+      }
+  auth: inherit
+
+runtime:
+  variables:
+    - name: baseUrl
+      value: http://localhost:8080
+  scripts:
+    - type: before-request
+      code: |-
+        const { v4: uuidv4 } = require('uuid');
+
+        const uuid = uuidv4();
+        bru.setVar("randRefID", uuid);
+    - type: after-response
+      code: |-
+        // Test
+        test("Status code is 200", function () {
+          expect(res.getStatus()).to.equal(200);
+        });
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5

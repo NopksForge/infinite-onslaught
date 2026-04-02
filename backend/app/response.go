@@ -19,6 +19,8 @@ const (
 	CodeFailedBadRequest ResponseCode = "400"
 	CodeFailedNotFound   ResponseCode = "404"
 	CodeFailedInternal   ResponseCode = "500"
+
+	CodeItemNotFound ResponseCode = "I001"
 )
 
 func ReturnSuccess(c *gin.Context, data any) {
@@ -36,10 +38,10 @@ func ReturnBadRequest(c *gin.Context, message string) {
 	})
 }
 
-func ReturnNotFound(c *gin.Context) {
-	c.JSON(http.StatusNotFound, Response{
-		Code:    string(CodeFailedNotFound),
-		Message: "User not found",
+func ReturnItemNotFound(c *gin.Context) {
+	c.JSON(http.StatusOK, Response{
+		Code:    string(CodeItemNotFound),
+		Message: "Item not found",
 	})
 }
 

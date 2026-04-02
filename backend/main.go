@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"infiniteonslaught/app"
+	"infiniteonslaught/app/craft"
 	"infiniteonslaught/config"
 	"log/slog"
 	"net/http"
@@ -71,16 +72,33 @@ func router(cfg config.Config) (*gin.Engine, func()) {
 		handlerTimeoutMiddleware,
 	)
 
-	cache := redis.NewClient(&redis.Options{
+	rdb := redis.NewClient(&redis.Options{
 		Addr: cfg.Cache.RedisURL,
 	})
+	llmClient := craft.NewLLMClient(craft.LLMConfig{
+		Endpoint: cfg.LLM.Endpoint,
+		Model:    cfg.LLM.Model,
+		Timeout:  cfg.LLM.Timeout,
+	})
+	if err := llmClient.Ping(context.Background()); err != nil {
+		slog.Error("llm: ollama not reachable (%v)", err)
+		panic(err)
+	} else {
+		slog.Info("llm: connected to %s (model: %s)", cfg.LLM.Endpoint, cfg.LLM.Model)
+	}
 
+	ItemCache := craft.NewItemCache(rdb)
+
+	h := craft.NewHandler(craft.HandlerConfig{
+		Cache: ItemCache,
+		LLM:   llmClient,
+	})
 	{
-		// r.POST("/users/create", h.CreateUser)
+		r.POST("/craft", h.GetCraft)
 	}
 
 	return r, func() {
-		cache.Close()
+		rdb.Close()
 	}
 }
 
