@@ -7,6 +7,7 @@ require (
 	github.com/gin-gonic/gin v1.12.0
 	github.com/google/uuid v1.6.0
 	github.com/redis/go-redis/v9 v9.18.0
+	github.com/samber/lo v1.53.0
 )
 
 require (

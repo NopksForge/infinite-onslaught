@@ -94,6 +94,7 @@ func router(cfg config.Config) (*gin.Engine, func()) {
 		LLM:   llmClient,
 	})
 	{
+		r.GET("/resources", h.ListResorces)
 		r.POST("/craft", h.Craft)
 		r.DELETE("/craft", h.ClearCraft)
 	}
@@ -184,6 +185,7 @@ var headers = []string{
 	"Accept-Encoding",
 	"X-CSRF-Token",
 	"Authorization",
+	"X-Reference-Id",
 	"accept",
 	"origin",
 	"Cache-Control",

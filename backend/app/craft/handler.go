@@ -12,6 +12,7 @@ import (
 	"infiniteonslaught/binder"
 
 	"github.com/gin-gonic/gin"
+	"github.com/samber/lo"
 )
 
 type handler struct {
@@ -34,11 +35,12 @@ func NewHandler(cfg HandlerConfig) CraftHandler {
 type CraftHandler interface {
 	Craft(c *gin.Context)
 	ClearCraft(c *gin.Context)
+	ListResorces(c *gin.Context)
 }
 
 func (h *handler) Craft(c *gin.Context) {
 	ctx := c.Request.Context()
-	req := new(serializer.GetCraftRequest)
+	req := new(serializer.CraftRequest)
 	if err := binder.Bind(c, req); err != nil {
 		c.Error(err)
 		return
@@ -109,7 +111,7 @@ func (h *handler) Craft(c *gin.Context) {
 	}
 
 	slog.Info("handler: result", "result", result)
-	app.ReturnSuccess(c, serializer.GetCraftResponseItem{
+	app.ReturnSuccess(c, serializer.CraftResponseItem{
 		Name:        result.Name,
 		Description: result.Description,
 		Emoji:       result.Emoji,
@@ -124,6 +126,20 @@ func (h *handler) ClearCraft(c *gin.Context) {
 	}
 
 	app.ReturnSuccess(c, nil)
+}
+
+func (h *handler) ListResorces(c *gin.Context) {
+	items := model.Starter
+
+	app.ReturnSuccess(c, serializer.ListResourcesResponse{
+		Items: lo.Map(items, func(item model.Item, _ int) serializer.ListResourcesResponseItem {
+			return serializer.ListResourcesResponseItem{
+				Name:        item.Name,
+				Description: item.Description,
+				Emoji:       item.Emoji,
+			}
+		}),
+	})
 }
 
 func getItem(h *handler, ctx context.Context, itemName string) (*model.Item, error) {
