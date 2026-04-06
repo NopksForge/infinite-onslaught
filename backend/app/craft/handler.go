@@ -24,14 +24,19 @@ type HandlerConfig struct {
 	LLM   LLMClient
 }
 
-func NewHandler(cfg HandlerConfig) *handler {
+func NewHandler(cfg HandlerConfig) CraftHandler {
 	return &handler{
 		cache: cfg.Cache,
 		llm:   cfg.LLM,
 	}
 }
 
-func (h *handler) GetCraft(c *gin.Context) {
+type CraftHandler interface {
+	Craft(c *gin.Context)
+	ClearCraft(c *gin.Context)
+}
+
+func (h *handler) Craft(c *gin.Context) {
 	ctx := c.Request.Context()
 	req := new(serializer.GetCraftRequest)
 	if err := binder.Bind(c, req); err != nil {
@@ -109,6 +114,16 @@ func (h *handler) GetCraft(c *gin.Context) {
 		Description: result.Description,
 		Emoji:       result.Emoji,
 	})
+}
+
+func (h *handler) ClearCraft(c *gin.Context) {
+	ctx := c.Request.Context()
+	if err := h.cache.ClearCraft(ctx); err != nil {
+		app.ReturnInternalError(c, err.Error())
+		return
+	}
+
+	app.ReturnSuccess(c, nil)
 }
 
 func getItem(h *handler, ctx context.Context, itemName string) (*model.Item, error) {

@@ -72,6 +72,36 @@ func (c *ItemCache) SetCombination(ctx context.Context, item1Name, item2Name str
 	return c.rdb.Set(ctx, key, combination, 0).Err()
 }
 
+func (c *ItemCache) ClearCraft(ctx context.Context) error {
+	if err := c.deleteKeysMatching(ctx, "COMBINATION:*"); err != nil {
+		return err
+	}
+	if err := c.deleteKeysMatching(ctx, "ITEM:*"); err != nil {
+		return err
+	}
+	return nil
+}
+
+func (c *ItemCache) deleteKeysMatching(ctx context.Context, pattern string) error {
+	var cursor uint64
+	for {
+		keys, next, err := c.rdb.Scan(ctx, cursor, pattern, 100).Result()
+		if err != nil {
+			return fmt.Errorf("scan %q: %w", pattern, err)
+		}
+		if len(keys) > 0 {
+			if err := c.rdb.Del(ctx, keys...).Err(); err != nil {
+				return fmt.Errorf("del keys matching %q: %w", pattern, err)
+			}
+		}
+		cursor = next
+		if cursor == 0 {
+			break
+		}
+	}
+	return nil
+}
+
 func generateCombinationKey(item1Name, item2Name string) string {
 	//sort
 	if item1Name > item2Name {

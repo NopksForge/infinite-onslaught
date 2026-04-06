@@ -23,7 +23,7 @@ const (
 	gracefulShutdownDuration = 10 * time.Second
 	serverReadHeaderTimeout  = 5 * time.Second
 	serverReadTimeout        = 5 * time.Second
-	serverWriteTimeout       = 10 * time.Second // request hangup after this durations
+	serverWriteTimeout       = 30 * time.Second // request hangup after this durations
 	handlerTimeout           = serverWriteTimeout - (time.Millisecond * 100)
 )
 
@@ -81,7 +81,7 @@ func router(cfg config.Config) (*gin.Engine, func()) {
 		Timeout:  cfg.LLM.Timeout,
 	})
 	if err := llmClient.Ping(context.Background()); err != nil {
-		slog.Error("llm: ollama not reachable (%v)", err)
+		slog.Error("llm: ollama not reachable", "error", err)
 		panic(err)
 	} else {
 		slog.Info("llm: connected to %s (model: %s)", cfg.LLM.Endpoint, cfg.LLM.Model)
@@ -94,7 +94,8 @@ func router(cfg config.Config) (*gin.Engine, func()) {
 		LLM:   llmClient,
 	})
 	{
-		r.POST("/craft", h.GetCraft)
+		r.POST("/craft", h.Craft)
+		r.DELETE("/craft", h.ClearCraft)
 	}
 
 	return r, func() {

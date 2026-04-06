@@ -68,7 +68,7 @@ No preamble, no explanation, no markdown fences. Just the raw JSON object.
  
 Required schema:
 {
-  "name": "string (1–3 words, creative)",
+  "name": "string (1 words, creative)",
   "description": "string (one evocative sentence, gen-z vibe)",
   "emoji": "string (single relevant emoji)",
 }
