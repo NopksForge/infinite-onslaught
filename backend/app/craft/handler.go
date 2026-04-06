@@ -2,7 +2,6 @@ package craft
 
 import (
 	"context"
-	"fmt"
 	"log/slog"
 
 	"infiniteonslaught/app"
@@ -46,6 +45,9 @@ func (h *handler) Craft(c *gin.Context) {
 		return
 	}
 
+	var isNewItem bool
+	var isNewCombination bool
+
 	// check if item name from request is existed
 	item1Data, err := getItem(h, ctx, req.Item1Name)
 	if err != nil {
@@ -83,9 +85,24 @@ func (h *handler) Craft(c *gin.Context) {
 		}
 		result.CreatedFrom = [][]string{{req.Item1Name, req.Item2Name}}
 
-		//[TODO: check if it already existed -> update create from -> return old value]
+		//check if it already existed
+		oldItem, err := h.cache.GetItem(ctx, result.Name)
+		if err != nil {
+			app.ReturnInternalError(c, err.Error())
+			return
+		}
+		if oldItem != nil {
+			//ai generated item that already existed
+			isNewItem = false
+			isNewCombination = true
 
-		// save to redis
+			oldItem.CreatedFrom = append(oldItem.CreatedFrom, result.CreatedFrom...)
+			result = oldItem
+		} else {
+			isNewItem = true
+			isNewCombination = true
+		}
+
 		if err = h.cache.SetCombination(ctx, req.Item1Name, req.Item2Name, &result.Name); err != nil {
 			app.ReturnInternalError(c, err.Error())
 			return
@@ -96,9 +113,10 @@ func (h *handler) Craft(c *gin.Context) {
 			return
 		}
 
-		slog.Info(fmt.Sprintf("new thing: %s + %s = %s", req.Item1Name, req.Item2Name, result.Name))
-
 	} else {
+		// combination already cached — not a new item or new combination for this request
+		isNewItem = false
+		isNewCombination = false
 		result, err = h.cache.GetItem(ctx, *itemName)
 		if err != nil {
 			app.ReturnInternalError(c, err.Error())
@@ -112,9 +130,12 @@ func (h *handler) Craft(c *gin.Context) {
 
 	slog.Info("handler: result", "result", result)
 	app.ReturnSuccess(c, serializer.CraftResponseItem{
-		Name:        result.Name,
-		Description: result.Description,
-		Emoji:       result.Emoji,
+		Name:             result.Name,
+		Description:      result.Description,
+		Emoji:            result.Emoji,
+		CreatedFrom:      result.CreatedFrom,
+		IsNewItem:        isNewItem,
+		IsNewCombination: isNewCombination,
 	})
 }
 

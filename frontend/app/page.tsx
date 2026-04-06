@@ -1,5 +1,5 @@
 import { HUD } from "./components/HUD/HUD";
-import { CraftTable } from "./components/CraftTable/CraftTable";
+import { CraftingPanel } from "./components/Crafting/CraftingPanel";
 import { Arena } from "./components/Arena/Arena";
 
 export default function Home() {
@@ -11,15 +11,13 @@ export default function Home() {
           <HUD />
         </section>
 
-        {/* Main two-column layout */}
+        {/* Main two-column layout: expanded crafting / resources column */}
         <section className="flex min-h-0 flex-1 gap-3">
-          {/* Craft table (40%) */}
-          <div className="flex min-h-0 w-[40%] flex-col rounded-lg border border-amber-400/60 bg-zinc-900/70 p-3 text-sm">
-            <CraftTable />
+          <div className="flex min-h-0 w-[46%] flex-col rounded-lg border border-amber-400/60 bg-zinc-900/70 p-3 text-sm">
+            <CraftingPanel />
           </div>
 
-          {/* Arena (60%) */}
-          <div className="flex min-h-0 w-[60%] flex-col rounded-lg border border-amber-400/60 bg-zinc-900/70 p-3 text-sm">
+          <div className="flex min-h-0 w-[54%] flex-col rounded-lg border border-amber-400/60 bg-zinc-900/70 p-3 text-sm">
             <Arena />
           </div>
         </section>

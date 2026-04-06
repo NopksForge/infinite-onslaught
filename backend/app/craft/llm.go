@@ -70,7 +70,7 @@ Required schema:
 {
   "name": "string (1 words, creative)",
   "description": "string (one evocative sentence, gen-z vibe)",
-  "emoji": "string (single relevant emoji)",
+  "emoji": "string (single relevant emoji (no multiple emojis))",
 }
  
 Examples:

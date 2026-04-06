@@ -23,7 +23,10 @@ func (r CraftRequest) Validate() error {
 }
 
 type CraftResponseItem struct {
-	Name        string `json:"name"`
-	Description string `json:"description"`
-	Emoji       string `json:"emoji"`
+	Name             string     `json:"name"`
+	Description      string     `json:"description"`
+	Emoji            string     `json:"emoji"`
+	CreatedFrom      [][]string `json:"created_from"`
+	IsNewItem        bool       `json:"is_new_item"`
+	IsNewCombination bool       `json:"is_new_combination"`
 }
