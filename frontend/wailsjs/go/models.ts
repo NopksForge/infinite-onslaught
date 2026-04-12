@@ -1,27 +1,4 @@
-export namespace craft {
-	
-	export class Item {
-	    name: string;
-	    description: string;
-	    emoji: string;
-	    created_from: string[][];
-	
-	    static createFrom(source: any = {}) {
-	        return new Item(source);
-	    }
-	
-	    constructor(source: any = {}) {
-	        if ('string' === typeof source) source = JSON.parse(source);
-	        this.name = source["name"];
-	        this.description = source["description"];
-	        this.emoji = source["emoji"];
-	        this.created_from = source["created_from"];
-	    }
-	}
-
-}
-
-export namespace main {
+export namespace backend {
 	
 	export class CraftResult {
 	    name: string;
@@ -59,6 +36,29 @@ export namespace main {
 	        this.ready = source["ready"];
 	        this.model = source["model"];
 	        this.error = source["error"];
+	    }
+	}
+
+}
+
+export namespace craft {
+	
+	export class Item {
+	    name: string;
+	    description: string;
+	    emoji: string;
+	    created_from: string[][];
+	
+	    static createFrom(source: any = {}) {
+	        return new Item(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.name = source["name"];
+	        this.description = source["description"];
+	        this.emoji = source["emoji"];
+	        this.created_from = source["created_from"];
 	    }
 	}
 

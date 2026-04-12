@@ -3,9 +3,11 @@ package main
 import (
 	"context"
 	"fmt"
-	"infiniteonslaught/craft"
 	"log/slog"
 	"time"
+
+	"infiniteonslaught/backend"
+	"infiniteonslaught/backend/craft"
 )
 
 // App is the main application struct. All exported methods are bound to the
@@ -36,7 +38,7 @@ func (a *App) startup(ctx context.Context) {
 		Timeout:  30 * time.Second,
 	})
 
-	a.startAPIServer()
+	backend.StartAPIServer(a)
 }
 
 func (a *App) shutdown(_ context.Context) {
@@ -47,21 +49,14 @@ func (a *App) shutdown(_ context.Context) {
 	}
 }
 
-// OllamaStatus is returned by CheckOllama.
-type OllamaStatus struct {
-	Ready bool   `json:"ready"`
-	Model string `json:"model"`
-	Error string `json:"error,omitempty"`
-}
-
 // CheckOllama reports whether Ollama is reachable and which model is configured.
-func (a *App) CheckOllama() OllamaStatus {
+func (a *App) CheckOllama() backend.OllamaStatus {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	if err := a.llm.Ping(ctx); err != nil {
-		return OllamaStatus{Ready: false, Error: err.Error()}
+		return backend.OllamaStatus{Ready: false, Error: err.Error()}
 	}
-	return OllamaStatus{Ready: true, Model: a.llm.Model()}
+	return backend.OllamaStatus{Ready: true, Model: a.llm.Model()}
 }
 
 // GetResources returns the four primordial starter items.
@@ -69,19 +64,9 @@ func (a *App) GetResources() []craft.Item {
 	return craft.Starter
 }
 
-// CraftResult is returned by Craft.
-type CraftResult struct {
-	Name             string     `json:"name"`
-	Description      string     `json:"description"`
-	Emoji            string     `json:"emoji"`
-	CreatedFrom      [][]string `json:"created_from"`
-	IsNewItem        bool       `json:"is_new_item"`
-	IsNewCombination bool       `json:"is_new_combination"`
-}
-
 // Craft combines two items. It checks the SQLite cache first; on a miss it
 // calls the Ollama LLM and persists the result.
-func (a *App) Craft(item1Name, item2Name string) (*CraftResult, error) {
+func (a *App) Craft(item1Name, item2Name string) (*backend.CraftResult, error) {
 	ctx := context.Background()
 
 	if getItem(a, ctx, item1Name) == nil {
@@ -153,7 +138,7 @@ func (a *App) Craft(item1Name, item2Name string) (*CraftResult, error) {
 	}
 
 	slog.Info("craft result", "name", result.Name, "isNew", isNewItem)
-	return &CraftResult{
+	return &backend.CraftResult{
 		Name:             result.Name,
 		Description:      result.Description,
 		Emoji:            result.Emoji,

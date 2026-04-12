@@ -1,4 +1,4 @@
-package main
+package backend
 
 import (
 	"encoding/json"
@@ -8,18 +8,18 @@ import (
 
 const apiPort = ":8081"
 
-// startAPIServer launches a localhost HTTP server that mirrors the Wails bound
+// StartAPIServer launches a localhost HTTP server that mirrors the Wails bound
 // methods. The frontend falls back to this when the Wails bridge is unavailable
 // (e.g. opening the Vite dev server URL directly in a browser).
-func (a *App) startAPIServer() {
+func StartAPIServer(app AppAPI) {
 	mux := http.NewServeMux()
 
 	mux.HandleFunc("GET /api/ollama-status", func(w http.ResponseWriter, _ *http.Request) {
-		writeJSON(w, a.CheckOllama())
+		writeJSON(w, app.CheckOllama())
 	})
 
 	mux.HandleFunc("GET /api/resources", func(w http.ResponseWriter, _ *http.Request) {
-		writeJSON(w, a.GetResources())
+		writeJSON(w, app.GetResources())
 	})
 
 	mux.HandleFunc("POST /api/craft", func(w http.ResponseWriter, r *http.Request) {
@@ -32,7 +32,7 @@ func (a *App) startAPIServer() {
 			writeError(w, err.Error(), http.StatusBadRequest)
 			return
 		}
-		result, err := a.Craft(body.Item1, body.Item2)
+		result, err := app.Craft(body.Item1, body.Item2)
 		if err != nil {
 			slog.Error("POST /api/craft: Craft failed", "item1", body.Item1, "item2", body.Item2, "error", err)
 			writeError(w, err.Error(), http.StatusInternalServerError)
@@ -42,7 +42,7 @@ func (a *App) startAPIServer() {
 	})
 
 	mux.HandleFunc("DELETE /api/craft", func(w http.ResponseWriter, _ *http.Request) {
-		if err := a.ClearCraft(); err != nil {
+		if err := app.ClearCraft(); err != nil {
 			slog.Error("DELETE /api/craft: ClearCraft failed", "error", err)
 			writeError(w, err.Error(), http.StatusInternalServerError)
 			return
