@@ -59,20 +59,37 @@ func (l *LLMClient) Ping(ctx context.Context) error {
 
 // ── Prompts ───────────────────────────────────────────────────────────────────
 
-const systemPrompt = `You are the crafting game.
+const systemPrompt = `You are the crafting engine for a roguelite tower defense game.
 When given two elements or items to combine, respond ONLY with a valid JSON object.
 No preamble, no explanation, no markdown fences. Just the raw JSON object.
 
 Required schema:
 {
-  "name": "string (1 word, creative)",
+  "name": "string (1-2 words, creative)",
   "description": "string (one evocative sentence, gen-z vibe)",
-  "emoji": "string (single relevant emoji)"
+  "emoji": "string (single relevant emoji)",
+  "defender_type": "string (one of: alive_melee, alive_range, spell, obstacle)",
+  "stats": {
+    "speed_mult": number (0.5 to 3.0),
+    "damage_mult": number (0.5 to 3.0),
+    "duration_mult": number (0.5 to 3.0),
+    "range_mult": number (0.5 to 3.0),
+    "area_mult": number (0.5 to 3.0)
+  }
 }
 
+defender_type guide:
+- alive_melee: physical brawlers that chase and attack monsters (fire, rock, beast combinations)
+- alive_range: stationary ranged attackers (air, light, energy, distance combinations)
+- spell: powerful one-time area effect on placement (explosion, storm, chaos combinations)
+- obstacle: durable walls that block and damage monsters (earth, metal, ice, barrier combinations)
+
+stat guide: set each multiplier (0.5-3.0) based on the item's nature relative to 1.0 baseline.
+
 Examples:
-{"name":"Steam","description":"Scalding vapor that obscures and burns.","emoji":"♨️"}
-{"name":"Lava","description":"Slow molten rock that obliterates whatever it touches.","emoji":"🌋"}
+{"name":"Lava","description":"Slow molten rock that obliterates everything it touches.","emoji":"🌋","defender_type":"alive_melee","stats":{"speed_mult":0.7,"damage_mult":2.5,"duration_mult":1.2,"range_mult":0.8,"area_mult":1.0}}
+{"name":"Storm","description":"Electric chaos raining judgment from above.","emoji":"⛈️","defender_type":"spell","stats":{"speed_mult":1.0,"damage_mult":2.0,"duration_mult":0.5,"range_mult":1.5,"area_mult":2.5}}
+{"name":"IceWall","description":"Frozen barrier that chills anything that dares get close.","emoji":"🧊","defender_type":"obstacle","stats":{"speed_mult":0.5,"damage_mult":0.8,"duration_mult":2.5,"range_mult":1.0,"area_mult":1.2}}
 `
 
 func buildPrompt(item1, item2 string, fixMode bool) string {
@@ -195,4 +212,29 @@ func sanitise(r *Item) {
 	if r.Emoji == "" {
 		r.Emoji = "✨"
 	}
+	// Validate defender type, default to alive_melee.
+	switch r.DefenderType {
+	case DefenderAliveMelee, DefenderAliveRange, DefenderSpell, DefenderObstacle:
+		// valid
+	default:
+		r.DefenderType = DefenderAliveMelee
+	}
+	// Clamp stat multipliers to 0.5–3.0.
+	clampMult := func(v float64) float64 {
+		if v < 0.5 {
+			return 0.5
+		}
+		if v > 3.0 {
+			return 3.0
+		}
+		if v == 0 {
+			return 1.0
+		}
+		return v
+	}
+	r.Stats.SpeedMult = clampMult(r.Stats.SpeedMult)
+	r.Stats.DamageMult = clampMult(r.Stats.DamageMult)
+	r.Stats.DurationMult = clampMult(r.Stats.DurationMult)
+	r.Stats.RangeMult = clampMult(r.Stats.RangeMult)
+	r.Stats.AreaMult = clampMult(r.Stats.AreaMult)
 }

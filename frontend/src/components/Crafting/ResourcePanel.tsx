@@ -14,6 +14,8 @@ function onResourceDragStart(e: DragEvent, resource: ResourceItem) {
     name: resource.name,
     emoji: resource.emoji,
     description: resource.description,
+    defender_type: resource.defender_type,
+    stats: resource.stats,
   };
   e.dataTransfer.setData("application/json", JSON.stringify(payload));
   e.dataTransfer.effectAllowed = "copy";
@@ -49,6 +51,8 @@ export function ResourcePanel({
                 name: r.name,
                 emoji: r.emoji,
                 description: r.description,
+                defender_type: r.defender_type,
+                stats: r.stats,
               })
             }
             className="flex flex-col items-center gap-2 rounded-xl border border-zinc-700 bg-zinc-950/70 px-3 py-4 text-center shadow-sm transition hover:border-amber-400/50 hover:bg-zinc-800/60 active:scale-[0.98] disabled:pointer-events-none disabled:opacity-50"

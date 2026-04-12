@@ -137,7 +137,7 @@ func (a *App) Craft(item1Name, item2Name string) (*backend.CraftResult, error) {
 		}
 	}
 
-	slog.Info("craft result", "name", result.Name, "isNew", isNewItem)
+	slog.Info("craft result", "name", result.Name, "isNew", isNewItem, "type", result.DefenderType)
 	return &backend.CraftResult{
 		Name:             result.Name,
 		Description:      result.Description,
@@ -145,6 +145,8 @@ func (a *App) Craft(item1Name, item2Name string) (*backend.CraftResult, error) {
 		CreatedFrom:      result.CreatedFrom,
 		IsNewItem:        isNewItem,
 		IsNewCombination: isNewCombination,
+		DefenderType:     result.DefenderType,
+		Stats:            result.Stats,
 	}, nil
 }
 

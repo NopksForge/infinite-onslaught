@@ -32,28 +32,40 @@ func NewDB(path string) (*DB, error) {
 func migrateSchema(db *sql.DB) error {
 	_, err := db.Exec(`
 		CREATE TABLE IF NOT EXISTS items (
-			name         TEXT PRIMARY KEY,
-			description  TEXT NOT NULL DEFAULT '',
-			emoji        TEXT NOT NULL DEFAULT '',
-			created_from TEXT NOT NULL DEFAULT '[]'
+			name          TEXT PRIMARY KEY,
+			description   TEXT NOT NULL DEFAULT '',
+			emoji         TEXT NOT NULL DEFAULT '',
+			created_from  TEXT NOT NULL DEFAULT '[]',
+			defender_type TEXT NOT NULL DEFAULT '',
+			stats         TEXT NOT NULL DEFAULT '{}'
 		);
 		CREATE TABLE IF NOT EXISTS combinations (
 			key         TEXT PRIMARY KEY,
 			result_name TEXT NOT NULL
 		);
 	`)
-	return err
+	if err != nil {
+		return err
+	}
+	// Add new columns to existing DBs (ignored if already present).
+	for _, col := range []string{
+		`ALTER TABLE items ADD COLUMN defender_type TEXT NOT NULL DEFAULT ''`,
+		`ALTER TABLE items ADD COLUMN stats TEXT NOT NULL DEFAULT '{}'`,
+	} {
+		_, _ = db.Exec(col)
+	}
+	return nil
 }
 
 // ── Item ─────────────────────────────────────────────────────────────────────
 
 func (d *DB) GetItem(ctx context.Context, name string) (*Item, error) {
 	row := d.conn.QueryRowContext(ctx,
-		`SELECT name, description, emoji, created_from FROM items WHERE name = ?`, name)
+		`SELECT name, description, emoji, created_from, defender_type, stats FROM items WHERE name = ?`, name)
 
 	var item Item
-	var createdFromJSON string
-	err := row.Scan(&item.Name, &item.Description, &item.Emoji, &createdFromJSON)
+	var createdFromJSON, statsJSON string
+	err := row.Scan(&item.Name, &item.Description, &item.Emoji, &createdFromJSON, &item.DefenderType, &statsJSON)
 	if err == sql.ErrNoRows {
 		return nil, nil
 	}
@@ -63,6 +75,11 @@ func (d *DB) GetItem(ctx context.Context, name string) (*Item, error) {
 	if err := json.Unmarshal([]byte(createdFromJSON), &item.CreatedFrom); err != nil {
 		item.CreatedFrom = [][]string{}
 	}
+	if statsJSON != "" && statsJSON != "{}" {
+		if err := json.Unmarshal([]byte(statsJSON), &item.Stats); err != nil {
+			item.Stats = DefenderStats{SpeedMult: 1, DamageMult: 1, DurationMult: 1, RangeMult: 1, AreaMult: 1}
+		}
+	}
 	return &item, nil
 }
 
@@ -71,10 +88,14 @@ func (d *DB) SetItem(ctx context.Context, item *Item) error {
 	if err != nil {
 		return fmt.Errorf("marshal created_from: %w", err)
 	}
+	statsJSON, err := json.Marshal(item.Stats)
+	if err != nil {
+		return fmt.Errorf("marshal stats: %w", err)
+	}
 	_, err = d.conn.ExecContext(ctx,
-		`INSERT OR REPLACE INTO items (name, description, emoji, created_from)
-		 VALUES (?, ?, ?, ?)`,
-		item.Name, item.Description, item.Emoji, string(createdFromJSON))
+		`INSERT OR REPLACE INTO items (name, description, emoji, created_from, defender_type, stats)
+		 VALUES (?, ?, ?, ?, ?, ?)`,
+		item.Name, item.Description, item.Emoji, string(createdFromJSON), string(item.DefenderType), string(statsJSON))
 	return err
 }
 

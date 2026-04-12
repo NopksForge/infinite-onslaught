@@ -45,7 +45,8 @@ export type GetResourcesResult =
 export async function getResources(): Promise<GetResourcesResult> {
   try {
     if (hasBridge()) {
-      return { ok: true, items: await GetResources() };
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      return { ok: true, items: (await GetResources()) as any as ResourceItem[] };
     }
     return { ok: true, items: await httpGet<ResourceItem[]>("/resources") };
   } catch (e) {
@@ -59,7 +60,8 @@ export async function postCraft(
 ): Promise<CraftResultData | null> {
   try {
     if (hasBridge()) {
-      const r = await Craft(item1Name, item2Name);
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const r = await Craft(item1Name, item2Name) as any;
       if (!r) return null;
       return {
         name: r.name,
@@ -68,6 +70,8 @@ export async function postCraft(
         created_from: Array.isArray(r.created_from) ? r.created_from : [],
         is_new_item: Boolean(r.is_new_item),
         is_new_combination: Boolean(r.is_new_combination),
+        defender_type: r.defender_type || undefined,
+        stats: r.stats || undefined,
       };
     }
     return await httpPost<CraftResultData>("/craft", {

@@ -4,6 +4,7 @@
 .DEFAULT_GOAL := help
 
 .PHONY: help backend frontend dev \
+	build-linux build-mac build-windows \
 	ollama-kill ollama-kill-linux ollama-kill-darwin ollama-kill-windows ollama-kill-windows-ps \
 	ollama-fresh ollama-fresh-linux ollama-fresh-darwin ollama-fresh-windows ollama-fresh-windows-ps
 
@@ -69,6 +70,20 @@ ollama-fresh-windows: ollama-kill-windows
 ollama-fresh-windows-ps: ollama-kill-windows-ps
 	ollama serve
 
+# ── Wails release builds (run on a host that supports the target; CGO/WebKit as required) ──
+
+# Linux desktop (WebKit2GTK 4.1 API tag — typical on Debian/Ubuntu-style distros)
+build-linux:
+	wails build -tags webkit2_41
+
+# macOS universal binary (run on macOS; cross-compile to Darwin from Linux is not supported by Wails)
+build-mac:
+	wails build -platform darwin/universal
+
+# Windows amd64 (.exe under build/bin/)
+build-windows:
+	wails build -platform windows/amd64
+
 # ── Help ─────────────────────────────────────────────────────────────────────
 
 help:
@@ -78,6 +93,11 @@ help:
 	@echo "    make backend              HTTP API on :8081 (go run . -serve, foreground)"
 	@echo "    make frontend             cd frontend && npm run dev"
 	@echo "    make dev                  go run + Vite together (one terminal; needs bash)"
+	@echo ""
+	@echo "  Wails build"
+	@echo "    make build-linux          wails build -tags webkit2_41"
+	@echo "    make build-mac            wails build -platform darwin/universal (on macOS)"
+	@echo "    make build-windows        wails build -platform windows/amd64"
 	@echo ""
 	@echo "  Ollama"
 	@echo "    make ollama-kill          Stop Ollama (system/brew) and free port 11434"

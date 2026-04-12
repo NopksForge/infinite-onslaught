@@ -1,7 +1,19 @@
+export type DefenderType = "alive_melee" | "alive_range" | "spell" | "obstacle";
+
+export type DefenderStats = {
+  speed_mult: number;
+  damage_mult: number;
+  duration_mult: number;
+  range_mult: number;
+  area_mult: number;
+};
+
 export type ResourceItem = {
   name: string;
   description: string;
   emoji: string;
+  defender_type?: DefenderType;
+  stats?: DefenderStats;
 };
 
 export type PlacedItem = {
@@ -9,6 +21,8 @@ export type PlacedItem = {
   name: string;
   emoji: string;
   description: string;
+  defender_type?: DefenderType;
+  stats?: DefenderStats;
 };
 
 export type PlacedItemDraft = Omit<PlacedItem, "id">;
@@ -23,6 +37,8 @@ export type CraftResultData = {
   created_from: string[][];
   is_new_item: boolean;
   is_new_combination: boolean;
+  defender_type?: DefenderType;
+  stats?: DefenderStats;
 };
 
 /** Persisted discovery entries (session storage). */

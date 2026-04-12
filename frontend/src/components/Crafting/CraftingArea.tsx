@@ -1,7 +1,21 @@
-import { forwardRef, type DragEvent, type PointerEvent } from "react";
+import { forwardRef, type DragEvent } from "react";
 
 import { ITEM_H, ITEM_W } from "./craftingGeometry";
 import type { PlacedWithPos } from "./types";
+
+const DEFENDER_TYPE_COLORS: Record<string, string> = {
+  alive_melee: "border-amber-400/70",
+  alive_range: "border-blue-400/70",
+  spell:       "border-purple-400/70",
+  obstacle:    "border-green-400/70",
+};
+
+const DEFENDER_TYPE_LABEL: Record<string, string> = {
+  alive_melee: "⚔ melee",
+  alive_range: "🏹 range",
+  spell:       "✦ spell",
+  obstacle:    "🛡 wall",
+};
 
 type CraftingAreaProps = {
   items: PlacedWithPos[];
@@ -10,24 +24,13 @@ type CraftingAreaProps = {
   onClear: () => void | Promise<void>;
   onCanvasDragOver: (e: DragEvent) => void;
   onCanvasDrop: (e: DragEvent) => void;
-  onItemPointerDown: (e: PointerEvent<HTMLDivElement>, id: string) => void;
-  onItemPointerMove: (e: PointerEvent<HTMLDivElement>, id: string) => void;
-  onItemPointerUp: (e: PointerEvent<HTMLDivElement>, id: string) => void;
+  /** Called when one item is dropped onto another to combine them. */
+  onItemDrop: (droppedId: string, targetId: string) => void;
 };
 
 export const CraftingArea = forwardRef<HTMLDivElement, CraftingAreaProps>(
   function CraftingArea(
-    {
-      items,
-      crafting,
-      clearing,
-      onClear,
-      onCanvasDragOver,
-      onCanvasDrop,
-      onItemPointerDown,
-      onItemPointerMove,
-      onItemPointerUp,
-    },
+    { items, crafting, clearing, onClear, onCanvasDragOver, onCanvasDrop, onItemDrop },
     ref
   ) {
     return (
@@ -50,6 +53,7 @@ export const CraftingArea = forwardRef<HTMLDivElement, CraftingAreaProps>(
             </button>
           </div>
         </div>
+
         <div
           ref={ref}
           onDragOver={onCanvasDragOver}
@@ -61,33 +65,80 @@ export const CraftingArea = forwardRef<HTMLDivElement, CraftingAreaProps>(
               Drop or click resources to start crafting
             </div>
           )}
-          {items.map((item) => (
-            <div
-              key={item.id}
-              role="presentation"
-              title={item.description}
-              onPointerDown={(e) => onItemPointerDown(e, item.id)}
-              onPointerMove={(e) => onItemPointerMove(e, item.id)}
-              onPointerUp={(e) => void onItemPointerUp(e, item.id)}
-              onPointerCancel={(e) => void onItemPointerUp(e, item.id)}
-              style={{
-                position: "absolute",
-                left: item.x,
-                top: item.y,
-                width: ITEM_W,
-                minHeight: ITEM_H,
-              }}
-              className={`flex cursor-grab flex-col items-center justify-center gap-0.5 rounded-lg border border-zinc-600 bg-zinc-900/90 px-1 py-1 text-center shadow-md select-none active:cursor-grabbing ${
-                crafting ? "pointer-events-none opacity-60" : ""
-              }`}
-            >
-              <span className="text-2xl leading-none">{item.emoji}</span>
-              <span className="line-clamp-2 w-full text-[9px] leading-tight text-zinc-300">
-                {item.name}
-              </span>
-            </div>
-          ))}
+
+          {items.map((item) => {
+            const typeColor = item.defender_type
+              ? (DEFENDER_TYPE_COLORS[item.defender_type] ?? "border-zinc-600")
+              : "border-zinc-600";
+            const typeLabel = item.defender_type
+              ? (DEFENDER_TYPE_LABEL[item.defender_type] ?? "")
+              : "";
+
+            // Payload for arena drop
+            const arenaPayload = JSON.stringify({
+              name: item.name,
+              emoji: item.emoji,
+              description: item.description,
+              defender_type: item.defender_type,
+              stats: item.stats,
+              craftingId: item.id,
+            });
+
+            return (
+              <div
+                key={item.id}
+                role="presentation"
+                title={`${item.name}${item.defender_type ? ` — ${item.defender_type}` : ""}\n${item.description}\n\nDrag onto another item to combine, or drag to the Arena to deploy.`}
+                draggable={!crafting}
+                onDragStart={(e) => {
+                  // Identify this crafting item for within-canvas moves/combines
+                  e.dataTransfer.setData("application/crafting-item", item.id);
+                  // Also carry arena payload so the arena can deploy it
+                  e.dataTransfer.setData("application/defender-json", arenaPayload);
+                  e.dataTransfer.effectAllowed = "move";
+                }}
+                onDragOver={(e) => {
+                  // Accept drops from other crafting items (for combining)
+                  if (e.dataTransfer.types.includes("application/crafting-item")) {
+                    e.preventDefault();
+                    e.stopPropagation(); // don't let canvas handle this as a move
+                    e.dataTransfer.dropEffect = "move";
+                  }
+                }}
+                onDrop={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation(); // prevent canvas onDrop from also firing
+                  const droppedId = e.dataTransfer.getData("application/crafting-item");
+                  if (droppedId && droppedId !== item.id) {
+                    onItemDrop(droppedId, item.id);
+                  }
+                }}
+                style={{
+                  position: "absolute",
+                  left: item.x,
+                  top: item.y,
+                  width: ITEM_W,
+                  minHeight: ITEM_H,
+                }}
+                className={`flex cursor-grab flex-col items-center justify-center gap-0.5 rounded-lg border bg-zinc-900/90 px-1 py-1 text-center shadow-md select-none active:cursor-grabbing ${typeColor} ${
+                  crafting ? "pointer-events-none opacity-60" : ""
+                }`}
+              >
+                <span className="text-2xl leading-none">{item.emoji}</span>
+                <span className="line-clamp-2 w-full text-[9px] leading-tight text-zinc-300">
+                  {item.name}
+                </span>
+                {typeLabel && (
+                  <span className="text-[8px] text-zinc-500/80">{typeLabel}</span>
+                )}
+              </div>
+            );
+          })}
         </div>
+
+        <p className="mt-2 text-[9px] text-zinc-600">
+          Drag items together to combine · Drag to Arena panel to deploy
+        </p>
       </div>
     );
   }
