@@ -35,7 +35,7 @@ export function CraftingPanel() {
     loadDiscoveries(SESSION_KEY)
   );
   const combineLockRef = useRef(false);
-  const { lastDeployedId } = useGame();
+  const { lastDeployedId, resourcesRevision } = useGame();
 
   itemsRef.current = items;
 
@@ -45,7 +45,7 @@ export function CraftingPanel() {
     setItems((prev) => prev.filter((i) => i.id !== lastDeployedId));
   }, [lastDeployedId]);
 
-  // Load resources on mount / after clear.
+  // Load resources on mount / after clear / after an element is unlocked.
   useEffect(() => {
     let cancelled = false;
     setResourcesLoading(true);
@@ -61,7 +61,7 @@ export function CraftingPanel() {
       }
     })();
     return () => { cancelled = true; };
-  }, [resourceTick]);
+  }, [resourceTick, resourcesRevision]);
 
   const handleClearCraft = useCallback(async () => {
     if (clearing) return;

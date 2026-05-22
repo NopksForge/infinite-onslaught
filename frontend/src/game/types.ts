@@ -38,6 +38,34 @@ export type MonsterTemplate = Omit<Monster, "id" | "x" | "y">;
 
 export type GameStatus = "idle" | "active" | "game_over";
 
+export type ModalKind = "level_up" | "new_element";
+
+export type UpgradeId =
+  | "swift_blades"
+  | "rapid_fire"
+  | "long_sight"
+  | "reinforced_walls"
+  | "eternal_flame"
+  | "wide_arc";
+
+export type Upgrade = {
+  id: UpgradeId;
+  name: string;
+  emoji: string;
+  description: string;
+};
+
+/** Cumulative multipliers applied on top of per-item DefenderStats. */
+export type UpgradeStacks = {
+  speedMult: number;
+  damageMult: number;
+  rangeMult: number;
+  durationMult: number;
+  areaMult: number;
+  /** Bonus HP added to the player base on top of the initial 100. */
+  bonusMaxBaseHp: number;
+};
+
 export type GameState = {
   status: GameStatus;
   wave: number; // current wave number (0 before first wave)
@@ -50,6 +78,10 @@ export type GameState = {
   waveTimer: number; // seconds until next wave spawns
   spawnTimer: number; // seconds until next monster from queue spawns
   spawnQueue: MonsterTemplate[];
+  /** Queue of modals waiting to be presented; head is the active modal. */
+  modalQueue: ModalKind[];
+  /** Active upgrade multipliers — applied when new defenders are built. */
+  upgrades: UpgradeStacks;
 };
 
 /** Item data needed to create a defender when dropped onto the arena. */

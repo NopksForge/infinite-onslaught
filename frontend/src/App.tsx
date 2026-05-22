@@ -8,5 +8,5 @@ export default function App() {
   if (!started) {
     return <StartPage onStart={() => setStarted(true)} />;
   }
-  return <GamePage />;
+  return <GamePage onExit={() => setStarted(false)} />;
 }

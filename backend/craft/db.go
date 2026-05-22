@@ -43,6 +43,9 @@ func migrateSchema(db *sql.DB) error {
 			key         TEXT PRIMARY KEY,
 			result_name TEXT NOT NULL
 		);
+		CREATE TABLE IF NOT EXISTS unlocks (
+			name TEXT PRIMARY KEY
+		);
 	`)
 	if err != nil {
 		return err
@@ -124,11 +127,40 @@ func (d *DB) SetCombination(ctx context.Context, item1, item2, resultName string
 	return err
 }
 
+// ── Unlocks ──────────────────────────────────────────────────────────────────
+
+// AddUnlock records that the given element name has been unlocked by the player.
+func (d *DB) AddUnlock(ctx context.Context, name string) error {
+	_, err := d.conn.ExecContext(ctx,
+		`INSERT OR IGNORE INTO unlocks (name) VALUES (?)`, name)
+	return err
+}
+
+// ListUnlocks returns the names of all unlocked elements.
+func (d *DB) ListUnlocks(ctx context.Context) ([]string, error) {
+	rows, err := d.conn.QueryContext(ctx, `SELECT name FROM unlocks`)
+	if err != nil {
+		return nil, fmt.Errorf("list unlocks: %w", err)
+	}
+	defer rows.Close()
+	var names []string
+	for rows.Next() {
+		var name string
+		if err := rows.Scan(&name); err != nil {
+			return nil, err
+		}
+		names = append(names, name)
+	}
+	return names, rows.Err()
+}
+
 // ── Lifecycle ────────────────────────────────────────────────────────────────
 
-// Clear deletes all discovered items and combinations (resets the game).
+// Clear deletes all discovered items, combinations, and unlocked elements
+// (resets the game to its initial state).
 func (d *DB) Clear(ctx context.Context) error {
-	_, err := d.conn.ExecContext(ctx, `DELETE FROM items; DELETE FROM combinations;`)
+	_, err := d.conn.ExecContext(ctx,
+		`DELETE FROM items; DELETE FROM combinations; DELETE FROM unlocks;`)
 	return err
 }
 

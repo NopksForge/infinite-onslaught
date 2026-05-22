@@ -11,8 +11,12 @@ import type {
   Defender,
   DeployableItem,
   GameState,
+  ModalKind,
   Monster,
   MonsterTemplate,
+  Upgrade,
+  UpgradeId,
+  UpgradeStacks,
 } from "./types";
 
 // ── Constants ─────────────────────────────────────────────────────────────────
@@ -21,6 +25,90 @@ const FIRST_WAVE_DELAY = 12; // seconds before first wave
 const WAVE_INTERVAL = 25; // seconds between waves
 const SPAWN_INTERVAL = 1.5; // seconds between individual monster spawns
 const BASE_Y = 88; // y% at which monsters hit the player base
+const NEW_ELEMENT_EVERY = 3; // levels between NewElement modal triggers
+const INITIAL_BASE_HP = 100;
+
+const NEUTRAL_STACKS: UpgradeStacks = {
+  speedMult: 1,
+  damageMult: 1,
+  rangeMult: 1,
+  durationMult: 1,
+  areaMult: 1,
+  bonusMaxBaseHp: 0,
+};
+
+/** Catalog of upgrades the player can earn on level up. */
+export const UPGRADE_CATALOG: Record<UpgradeId, Upgrade> = {
+  swift_blades: {
+    id: "swift_blades",
+    name: "Swift Blades",
+    emoji: "💨",
+    description: "+20% defender move speed.",
+  },
+  rapid_fire: {
+    id: "rapid_fire",
+    name: "Rapid Fire",
+    emoji: "💥",
+    description: "+25% defender damage.",
+  },
+  long_sight: {
+    id: "long_sight",
+    name: "Long Sight",
+    emoji: "🎯",
+    description: "+20% attack range.",
+  },
+  reinforced_walls: {
+    id: "reinforced_walls",
+    name: "Reinforced Walls",
+    emoji: "🏰",
+    description: "+30 max base HP (and heals 30).",
+  },
+  eternal_flame: {
+    id: "eternal_flame",
+    name: "Eternal Flame",
+    emoji: "🔥",
+    description: "+30% defender HP & lifetime.",
+  },
+  wide_arc: {
+    id: "wide_arc",
+    name: "Wide Arc",
+    emoji: "✦",
+    description: "+25% spell / obstacle area.",
+  },
+};
+
+const UPGRADE_IDS: UpgradeId[] = Object.keys(UPGRADE_CATALOG) as UpgradeId[];
+
+/** Returns three distinct random upgrade ids. */
+function rollUpgradeChoices(): UpgradeId[] {
+  const pool = [...UPGRADE_IDS];
+  const out: UpgradeId[] = [];
+  while (out.length < 3 && pool.length > 0) {
+    const idx = Math.floor(Math.random() * pool.length);
+    out.push(pool.splice(idx, 1)[0]);
+  }
+  return out;
+}
+
+function applyUpgradeToStacks(
+  stacks: UpgradeStacks,
+  id: UpgradeId
+): UpgradeStacks {
+  switch (id) {
+    case "swift_blades":
+      return { ...stacks, speedMult: stacks.speedMult * 1.2 };
+    case "rapid_fire":
+      return { ...stacks, damageMult: stacks.damageMult * 1.25 };
+    case "long_sight":
+      return { ...stacks, rangeMult: stacks.rangeMult * 1.2 };
+    case "reinforced_walls":
+      return { ...stacks, bonusMaxBaseHp: stacks.bonusMaxBaseHp + 30 };
+    case "eternal_flame":
+      return { ...stacks, durationMult: stacks.durationMult * 1.3 };
+    case "wide_arc":
+      return { ...stacks, areaMult: stacks.areaMult * 1.25 };
+  }
+}
 
 /** Base stats for each defender type (multiplied by item stats). */
 const BASE_DEFENDER: Record<
@@ -102,13 +190,15 @@ function initialState(): GameState {
     wave: 0,
     xp: 0,
     level: 1,
-    baseHp: 100,
-    maxBaseHp: 100,
+    baseHp: INITIAL_BASE_HP,
+    maxBaseHp: INITIAL_BASE_HP,
     defenders: [],
     monsters: [],
     waveTimer: FIRST_WAVE_DELAY,
     spawnTimer: 0,
     spawnQueue: [],
+    modalQueue: [],
+    upgrades: { ...NEUTRAL_STACKS },
   };
 }
 
@@ -120,7 +210,12 @@ function dist(ax: number, ay: number, bx: number, by: number): number {
   return Math.sqrt(dx * dx + dy * dy);
 }
 
-function buildDefender(item: DeployableItem, x: number, y: number): Defender {
+function buildDefender(
+  item: DeployableItem,
+  x: number,
+  y: number,
+  upgrades: UpgradeStacks
+): Defender {
   const dtype: DefenderType = item.defender_type ?? "alive_melee";
   const stats: DefenderStats = item.stats ?? {
     speed_mult: 1,
@@ -130,6 +225,7 @@ function buildDefender(item: DeployableItem, x: number, y: number): Defender {
     area_mult: 1,
   };
   const base = BASE_DEFENDER[dtype];
+  const hp = base.hp * stats.duration_mult * upgrades.durationMult;
   return {
     id: crypto.randomUUID(),
     name: item.name,
@@ -137,14 +233,14 @@ function buildDefender(item: DeployableItem, x: number, y: number): Defender {
     type: dtype,
     x,
     y,
-    hp: base.hp * stats.duration_mult,
-    maxHp: base.hp * stats.duration_mult,
-    lifetime: base.lifetime * stats.duration_mult,
+    hp,
+    maxHp: hp,
+    lifetime: base.lifetime * stats.duration_mult * upgrades.durationMult,
     attackCooldown: 0,
-    moveSpeed: base.moveSpeed * stats.speed_mult,
-    attackRange: base.attackRange * stats.range_mult,
-    attackDamage: base.attackDamage * stats.damage_mult,
-    spellArea: base.spellArea * stats.area_mult,
+    moveSpeed: base.moveSpeed * stats.speed_mult * upgrades.speedMult,
+    attackRange: base.attackRange * stats.range_mult * upgrades.rangeMult,
+    attackDamage: base.attackDamage * stats.damage_mult * upgrades.damageMult,
+    spellArea: base.spellArea * stats.area_mult * upgrades.areaMult,
     spellApplied: false,
   };
 }
@@ -174,6 +270,8 @@ function generateWave(wave: number): MonsterTemplate[] {
 
 function gameTick(state: GameState, dt: number): GameState {
   if (state.status !== "active") return state;
+  // Freeze the world while any modal is pending.
+  if (state.modalQueue.length > 0) return state;
 
   let { wave, xp, level, baseHp, waveTimer, spawnTimer, spawnQueue } = state;
   const defenders: Defender[] = state.defenders.map((d) => ({ ...d }));
@@ -337,6 +435,18 @@ function gameTick(state: GameState, dt: number): GameState {
   const newXp = xp + xpGained;
   const newLevel = computeLevel(newXp);
 
+  // 6a. Enqueue modals on level transitions (one level_up per gained level,
+  // plus a new_element every Nth level).
+  const newModalQueue = [...state.modalQueue];
+  if (newLevel > level) {
+    for (let lvl = level + 1; lvl <= newLevel; lvl++) {
+      newModalQueue.push("level_up");
+      if (lvl % NEW_ELEMENT_EVERY === 0) {
+        newModalQueue.push("new_element");
+      }
+    }
+  }
+
   // 7. Filter dead entities
   const liveDefenders = defenders.filter(
     (d) => !deadDefenderIds.has(d.id)
@@ -356,6 +466,7 @@ function gameTick(state: GameState, dt: number): GameState {
     waveTimer,
     spawnTimer,
     spawnQueue: newSpawnQueue,
+    modalQueue: newModalQueue,
     status: newBaseHp <= 0 ? "game_over" : "active",
   };
 }
@@ -365,10 +476,20 @@ function gameTick(state: GameState, dt: number): GameState {
 type GameContextValue = {
   gameState: GameState;
   xpProgress: { current: number; needed: number };
+  /** Head of the modal queue, or null when nothing is pending. */
+  activeModal: ModalKind | null;
+  /** Three random upgrade ids for the LevelUp modal, regenerated per pop. */
+  pendingUpgradeChoices: Upgrade[];
+  /** Incremented when an element is unlocked, so the resource panel re-fetches. */
+  resourcesRevision: number;
   startGame: () => void;
   resetGame: () => void;
+  exitToMenu: () => void;
   deployDefender: (item: DeployableItem, arenaX: number, arenaY: number) => void;
   removeFromCraft: (id: string) => void;
+  applyUpgrade: (id: UpgradeId) => void;
+  /** Called by NewElement modal after the chosen element has been persisted. */
+  applyNewElement: (name: string) => void;
   /** ID of item pending removal from crafting table after arena drop. */
   lastDeployedId: string | null;
 };
@@ -383,12 +504,23 @@ export function useGame(): GameContextValue {
 
 // ── Provider ──────────────────────────────────────────────────────────────────
 
-export function GameProvider({ children }: { children: React.ReactNode }) {
+type GameProviderProps = {
+  children: React.ReactNode;
+  /** Called by exitToMenu (Back to menu in GameOverModal). */
+  onExit?: () => void;
+};
+
+export function GameProvider({ children, onExit }: GameProviderProps) {
   const stateRef = useRef<GameState>(initialState());
   const [renderState, setRenderState] = useState<GameState>(initialState());
   const [lastDeployedId, setLastDeployedId] = useState<string | null>(null);
+  const [resourcesRevision, setResourcesRevision] = useState(0);
+  const [pendingUpgradeChoices, setPendingUpgradeChoices] = useState<Upgrade[]>(
+    []
+  );
   const rafRef = useRef<number>(0);
   const lastTsRef = useRef<number>(0);
+  const lastActiveModalRef = useRef<ModalKind | null>(null);
 
   const syncState = useCallback(() => {
     setRenderState({ ...stateRef.current });
@@ -414,6 +546,19 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     return () => cancelAnimationFrame(rafRef.current);
   }, [loop]);
 
+  // When the head of the modal queue becomes 'level_up' (i.e. a fresh
+  // LevelUp modal is being opened), roll a new set of upgrade choices.
+  const activeModal = renderState.modalQueue[0] ?? null;
+  useEffect(() => {
+    const prev = lastActiveModalRef.current;
+    lastActiveModalRef.current = activeModal;
+    if (activeModal === "level_up" && prev !== "level_up") {
+      setPendingUpgradeChoices(
+        rollUpgradeChoices().map((id) => UPGRADE_CATALOG[id])
+      );
+    }
+  }, [activeModal]);
+
   const startGame = useCallback(() => {
     stateRef.current = { ...stateRef.current, status: "active" };
     syncState();
@@ -424,12 +569,22 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     stateRef.current.status = "active";
     stateRef.current.waveTimer = FIRST_WAVE_DELAY;
     syncState();
+    setLastDeployedId(null);
+    setPendingUpgradeChoices([]);
   }, [syncState]);
+
+  const exitToMenu = useCallback(() => {
+    stateRef.current = initialState();
+    syncState();
+    setLastDeployedId(null);
+    setPendingUpgradeChoices([]);
+    onExit?.();
+  }, [onExit, syncState]);
 
   const deployDefender = useCallback(
     (item: DeployableItem, arenaX: number, arenaY: number) => {
-      const defender = buildDefender(item, arenaX, arenaY);
       const current = stateRef.current;
+      const defender = buildDefender(item, arenaX, arenaY, current.upgrades);
       stateRef.current = {
         ...current,
         defenders: [...current.defenders, defender],
@@ -443,6 +598,47 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     setLastDeployedId(id);
   }, []);
 
+  /** Pops the head of the modal queue. */
+  const popModal = useCallback(() => {
+    const current = stateRef.current;
+    if (current.modalQueue.length === 0) return;
+    stateRef.current = {
+      ...current,
+      modalQueue: current.modalQueue.slice(1),
+    };
+    syncState();
+  }, [syncState]);
+
+  const applyUpgrade = useCallback(
+    (id: UpgradeId) => {
+      const current = stateRef.current;
+      const upgrades = applyUpgradeToStacks(current.upgrades, id);
+      let { baseHp, maxBaseHp } = current;
+      if (id === "reinforced_walls") {
+        maxBaseHp = maxBaseHp + 30;
+        baseHp = Math.min(maxBaseHp, baseHp + 30);
+      }
+      stateRef.current = {
+        ...current,
+        upgrades,
+        baseHp,
+        maxBaseHp,
+        modalQueue: current.modalQueue.slice(1),
+      };
+      syncState();
+    },
+    [syncState]
+  );
+
+  const applyNewElement = useCallback(
+    (_name: string) => {
+      // Backend already persisted; just advance the queue and bump resources.
+      setResourcesRevision((n) => n + 1);
+      popModal();
+    },
+    [popModal]
+  );
+
   const progress = xpProgress(renderState.xp, renderState.level);
 
   return (
@@ -450,10 +646,16 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
       value={{
         gameState: renderState,
         xpProgress: progress,
+        activeModal,
+        pendingUpgradeChoices,
+        resourcesRevision,
         startGame,
         resetGame,
+        exitToMenu,
         deployDefender,
         removeFromCraft,
+        applyUpgrade,
+        applyNewElement,
         lastDeployedId,
       }}
     >

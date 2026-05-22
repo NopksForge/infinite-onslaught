@@ -59,9 +59,57 @@ func (a *App) CheckOllama() backend.OllamaStatus {
 	return backend.OllamaStatus{Ready: true, Model: a.llm.Model()}
 }
 
-// GetResources returns the four primordial starter items.
+// GetResources returns the primordial starter items plus any elements the
+// player has unlocked via the NewElement modal.
 func (a *App) GetResources() []craft.Item {
-	return craft.Starter
+	out := append([]craft.Item{}, craft.Starter...)
+	unlocked, err := a.db.ListUnlocks(context.Background())
+	if err != nil {
+		slog.Error("GetResources: list unlocks", "error", err)
+		return out
+	}
+	for _, name := range unlocked {
+		if item := craft.FindUnlockable(name); item != nil {
+			out = append(out, *item)
+		}
+	}
+	return out
+}
+
+// GetUnlockables returns the elements from the unlockable pool that the player
+// has not unlocked yet. Used by the NewElement modal to present choices.
+func (a *App) GetUnlockables() []craft.Item {
+	ctx := context.Background()
+	unlocked, err := a.db.ListUnlocks(ctx)
+	if err != nil {
+		slog.Error("GetUnlockables: list unlocks", "error", err)
+		return nil
+	}
+	seen := make(map[string]struct{}, len(unlocked))
+	for _, n := range unlocked {
+		seen[n] = struct{}{}
+	}
+	out := make([]craft.Item, 0, len(craft.UnlockablePool))
+	for _, item := range craft.UnlockablePool {
+		if _, ok := seen[item.Name]; !ok {
+			out = append(out, item)
+		}
+	}
+	return out
+}
+
+// UnlockElement records that the player has chosen to add the named element
+// to their resource pool. Returns the unlocked item.
+func (a *App) UnlockElement(name string) (*craft.Item, error) {
+	item := craft.FindUnlockable(name)
+	if item == nil {
+		return nil, fmt.Errorf("unknown unlockable element: %s", name)
+	}
+	if err := a.db.AddUnlock(context.Background(), name); err != nil {
+		return nil, fmt.Errorf("persist unlock %q: %w", name, err)
+	}
+	slog.Info("unlocked element", "name", name)
+	return item, nil
 }
 
 // Craft combines two items. It checks the SQLite cache first; on a miss it

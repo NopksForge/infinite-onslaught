@@ -1,4 +1,10 @@
-import { Craft, ClearCraft, GetResources } from "../../../wailsjs/go/main/App";
+import {
+  Craft,
+  ClearCraft,
+  GetResources,
+  GetUnlockables,
+  UnlockElement,
+} from "../../../wailsjs/go/main/App";
 import type { CraftResultData, ResourceItem } from "./types";
 
 const API = "http://localhost:8081/api";
@@ -93,5 +99,29 @@ export async function deleteCraft(): Promise<boolean> {
     return true;
   } catch {
     return false;
+  }
+}
+
+export async function getUnlockables(): Promise<ResourceItem[]> {
+  try {
+    if (hasBridge()) {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      return (await GetUnlockables()) as any as ResourceItem[];
+    }
+    return await httpGet<ResourceItem[]>("/unlockables");
+  } catch {
+    return [];
+  }
+}
+
+export async function unlockElement(name: string): Promise<ResourceItem | null> {
+  try {
+    if (hasBridge()) {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      return (await UnlockElement(name)) as any as ResourceItem;
+    }
+    return await httpPost<ResourceItem>("/unlock", { name });
+  } catch {
+    return null;
   }
 }

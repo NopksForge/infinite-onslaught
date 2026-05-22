@@ -27,4 +27,6 @@ type AppAPI interface {
 	GetResources() []craft.Item
 	Craft(item1, item2 string) (*CraftResult, error)
 	ClearCraft() error
+	GetUnlockables() []craft.Item
+	UnlockElement(name string) (*craft.Item, error)
 }

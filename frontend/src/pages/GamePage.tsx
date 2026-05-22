@@ -2,10 +2,17 @@ import { HUD } from "../components/HUD/HUD";
 import { CraftingPanel } from "../components/Crafting/CraftingPanel";
 import { Arena } from "../components/Arena/Arena";
 import { GameProvider } from "../game/gameContext";
+import { GameOverModal } from "../components/Modals/GameOverModal";
+import { LevelUpModal } from "../components/Modals/LevelUpModal";
+import { NewElementModal } from "../components/Modals/NewElementModal";
 
-export function GamePage() {
+type GamePageProps = {
+  onExit: () => void;
+};
+
+export function GamePage({ onExit }: GamePageProps) {
   return (
-    <GameProvider>
+    <GameProvider onExit={onExit}>
       <div className="min-h-screen w-full bg-zinc-950 text-zinc-50 font-sans">
         <main className="mx-auto flex h-screen max-w-6xl flex-col gap-3 px-4 py-4">
           {/* HUD */}
@@ -24,6 +31,9 @@ export function GamePage() {
             </div>
           </section>
         </main>
+        <LevelUpModal />
+        <NewElementModal />
+        <GameOverModal />
       </div>
     </GameProvider>
   );

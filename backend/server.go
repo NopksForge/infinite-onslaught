@@ -50,6 +50,28 @@ func StartAPIServer(app AppAPI) {
 		w.WriteHeader(http.StatusNoContent)
 	})
 
+	mux.HandleFunc("GET /api/unlockables", func(w http.ResponseWriter, _ *http.Request) {
+		writeJSON(w, app.GetUnlockables())
+	})
+
+	mux.HandleFunc("POST /api/unlock", func(w http.ResponseWriter, r *http.Request) {
+		var body struct {
+			Name string `json:"name"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+			slog.Error("POST /api/unlock: decode body", "error", err)
+			writeError(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		item, err := app.UnlockElement(body.Name)
+		if err != nil {
+			slog.Error("POST /api/unlock: UnlockElement failed", "name", body.Name, "error", err)
+			writeError(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		writeJSON(w, item)
+	})
+
 	srv := &http.Server{
 		Addr:    apiPort,
 		Handler: corsMiddleware(logMiddleware(mux)),

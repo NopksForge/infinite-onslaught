@@ -10,7 +10,7 @@ const DEFENDER_BORDER: Record<string, string> = {
 };
 
 export function ArenaCanvas() {
-  const { gameState, startGame, resetGame, deployDefender, removeFromCraft } = useGame();
+  const { gameState, startGame, deployDefender, removeFromCraft } = useGame();
   const { status, wave, waveTimer, defenders, monsters, spawnQueue } = gameState;
   const arenaRef = useRef<HTMLDivElement>(null);
   const [dragOver, setDragOver] = useState(false);
@@ -88,21 +88,6 @@ export function ArenaCanvas() {
             className="rounded-lg border border-amber-400/60 bg-amber-900/40 px-4 py-1.5 text-xs font-semibold text-amber-200 transition hover:bg-amber-800/50"
           >
             Start
-          </button>
-        </div>
-      )}
-
-      {/* Game over overlay */}
-      {status === "game_over" && (
-        <div className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-3 bg-zinc-950/80">
-          <div className="text-lg font-bold text-red-400">Base Destroyed</div>
-          <div className="text-xs text-zinc-400">Wave {wave} reached</div>
-          <button
-            type="button"
-            onClick={resetGame}
-            className="rounded-lg border border-red-400/60 bg-red-900/40 px-4 py-1.5 text-xs font-semibold text-red-200 transition hover:bg-red-800/50"
-          >
-            Restart
           </button>
         </div>
       )}

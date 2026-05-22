@@ -17,3 +17,11 @@ export function Craft(arg1, arg2) {
 export function GetResources() {
   return window['go']['main']['App']['GetResources']();
 }
+
+export function GetUnlockables() {
+  return window['go']['main']['App']['GetUnlockables']();
+}
+
+export function UnlockElement(arg1) {
+  return window['go']['main']['App']['UnlockElement'](arg1);
+}

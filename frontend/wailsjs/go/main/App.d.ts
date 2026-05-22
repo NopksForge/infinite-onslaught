@@ -10,3 +10,7 @@ export function ClearCraft():Promise<void>;
 export function Craft(arg1:string,arg2:string):Promise<backend.CraftResult>;
 
 export function GetResources():Promise<Array<craft.Item>>;
+
+export function GetUnlockables():Promise<Array<craft.Item>>;
+
+export function UnlockElement(arg1:string):Promise<craft.Item>;
