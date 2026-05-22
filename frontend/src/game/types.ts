@@ -36,7 +36,7 @@ export type Monster = {
 
 export type MonsterTemplate = Omit<Monster, "id" | "x" | "y">;
 
-export type GameStatus = "idle" | "active" | "game_over";
+export type GameStatus = "idle" | "active" | "paused" | "game_over";
 
 export type ModalKind = "level_up" | "new_element";
 

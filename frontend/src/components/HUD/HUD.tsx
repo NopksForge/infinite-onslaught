@@ -1,11 +1,12 @@
 import { useGame } from "../../game/gameContext";
 
 export function HUD() {
-  const { gameState, xpProgress } = useGame();
-  const { level, xp, baseHp, maxBaseHp } = gameState;
+  const { gameState, xpProgress, pauseGame, resumeGame } = useGame();
+  const { status, level, xp, baseHp, maxBaseHp } = gameState;
   const { current: xpCurrent, needed: xpNeeded } = xpProgress;
   const xpPct = xpNeeded > 0 ? (xpCurrent / xpNeeded) * 100 : 0;
   const hpPct = maxBaseHp > 0 ? (baseHp / maxBaseHp) * 100 : 0;
+  const canPause = status === "active" || status === "paused";
 
   return (
     <header className="flex items-center justify-between gap-4 rounded-lg border border-amber-400/60 bg-zinc-900/70 px-4 py-2 text-sm">
@@ -48,6 +49,16 @@ export function HUD() {
           {Math.ceil(baseHp)} / {maxBaseHp}
         </span>
       </div>
+
+      <button
+        type="button"
+        onClick={status === "paused" ? resumeGame : pauseGame}
+        disabled={!canPause}
+        title={status === "paused" ? "Resume (Esc)" : "Pause (Esc)"}
+        className="rounded-md border border-zinc-700 bg-zinc-800 px-2 py-1 text-xs text-zinc-200 transition hover:bg-zinc-700 disabled:cursor-not-allowed disabled:opacity-40"
+      >
+        {status === "paused" ? "▶" : "❚❚"}
+      </button>
     </header>
   );
 }

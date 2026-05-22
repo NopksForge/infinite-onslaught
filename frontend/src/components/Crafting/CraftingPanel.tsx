@@ -5,6 +5,7 @@ import { deleteCraft, getResources, postCraft } from "./craftApi";
 import { useGame } from "../../game/gameContext";
 import { DiscoveryPanel } from "./DiscoveryPanel";
 import {
+  DISCOVERY_KEY,
   clearDiscoveriesStorage,
   loadDiscoveries,
   saveDiscoveries,
@@ -19,7 +20,7 @@ import type {
   ResourceItem,
 } from "./types";
 
-const SESSION_KEY = "local";
+const SESSION_KEY = DISCOVERY_KEY;
 
 export function CraftingPanel() {
   const canvasRef = useRef<HTMLDivElement>(null);

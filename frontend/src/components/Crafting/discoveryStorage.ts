@@ -1,6 +1,7 @@
 import type { DiscoveryItem } from "./types";
 
 const PREFIX = "craft-discoveries:";
+export const DISCOVERY_KEY = "local";
 
 function normalizeCreatedFrom(raw: unknown): string[][] {
   if (!Array.isArray(raw)) return [];

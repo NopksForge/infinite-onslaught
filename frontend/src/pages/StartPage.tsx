@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { CheckOllama } from "../../wailsjs/go/main/App";
+import { loadRunHistory, type RunStats } from "../game/runStorage";
 
 type OllamaStatus = {
   ready: boolean;
@@ -30,9 +31,33 @@ async function pingOllama(): Promise<OllamaStatus> {
   }
 }
 
+function RunStatLine({ label, run }: { label: string; run: RunStats }) {
+  return (
+    <div className="flex items-baseline justify-between gap-2 text-[11px]">
+      <span className="font-semibold uppercase tracking-wide text-zinc-500">
+        {label}
+      </span>
+      <span className="text-zinc-300">
+        Wave <span className="font-semibold text-zinc-50">{run.wave}</span>
+        <span className="px-1.5 text-zinc-600">·</span>
+        Lv <span className="font-semibold text-zinc-50">{run.level}</span>
+        <span className="px-1.5 text-zinc-600">·</span>
+        <span className="font-semibold text-zinc-50">
+          {run.xp.toLocaleString()}
+        </span>{" "}
+        XP
+        <span className="px-1.5 text-zinc-600">·</span>
+        <span className="font-semibold text-zinc-50">{run.discoveries}</span>{" "}
+        found
+      </span>
+    </div>
+  );
+}
+
 export function StartPage({ onStart }: Props) {
   const [status, setStatus] = useState<OllamaStatus | null>(null);
   const [checking, setChecking] = useState(false);
+  const [history] = useState(() => loadRunHistory());
 
   const check = useCallback(async () => {
     setChecking(true);
@@ -123,6 +148,19 @@ export function StartPage({ onStart }: Props) {
           </div>
         )}
       </div>
+
+      {/* Run history */}
+      {(history.last || history.best) && (
+        <div className="w-full max-w-sm rounded-xl border border-zinc-700 bg-zinc-900/80 p-5">
+          <div className="mb-3 text-xs font-semibold uppercase tracking-wide text-zinc-400">
+            Run History
+          </div>
+          <div className="flex flex-col gap-2">
+            {history.best && <RunStatLine label="Best" run={history.best} />}
+            {history.last && <RunStatLine label="Last" run={history.last} />}
+          </div>
+        </div>
+      )}
 
       {/* Start button */}
       <button

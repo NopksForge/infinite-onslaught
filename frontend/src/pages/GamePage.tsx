@@ -5,6 +5,7 @@ import { GameProvider } from "../game/gameContext";
 import { GameOverModal } from "../components/Modals/GameOverModal";
 import { LevelUpModal } from "../components/Modals/LevelUpModal";
 import { NewElementModal } from "../components/Modals/NewElementModal";
+import { PauseModal } from "../components/Modals/PauseModal";
 
 type GamePageProps = {
   onExit: () => void;
@@ -33,6 +34,7 @@ export function GamePage({ onExit }: GamePageProps) {
         </main>
         <LevelUpModal />
         <NewElementModal />
+        <PauseModal />
         <GameOverModal />
       </div>
     </GameProvider>

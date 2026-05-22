@@ -7,6 +7,11 @@ import {
   useState,
 } from "react";
 import type { DefenderStats, DefenderType } from "../components/Crafting/types";
+import {
+  DISCOVERY_KEY,
+  loadDiscoveries,
+} from "../components/Crafting/discoveryStorage";
+import { saveRun } from "./runStorage";
 import type {
   Defender,
   DeployableItem,
@@ -485,6 +490,8 @@ type GameContextValue = {
   startGame: () => void;
   resetGame: () => void;
   exitToMenu: () => void;
+  pauseGame: () => void;
+  resumeGame: () => void;
   deployDefender: (item: DeployableItem, arenaX: number, arenaY: number) => void;
   removeFromCraft: (id: string) => void;
   applyUpgrade: (id: UpgradeId) => void;
@@ -581,6 +588,57 @@ export function GameProvider({ children, onExit }: GameProviderProps) {
     onExit?.();
   }, [onExit, syncState]);
 
+  const pauseGame = useCallback(() => {
+    const current = stateRef.current;
+    if (current.status !== "active") return;
+    stateRef.current = { ...current, status: "paused" };
+    syncState();
+  }, [syncState]);
+
+  const resumeGame = useCallback(() => {
+    const current = stateRef.current;
+    if (current.status !== "paused") return;
+    stateRef.current = { ...current, status: "active" };
+    syncState();
+  }, [syncState]);
+
+  // Esc toggles pause while the run is in progress (ignored during modals,
+  // idle/start screen, and game-over).
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if (e.key !== "Escape") return;
+      const s = stateRef.current;
+      if (s.modalQueue.length > 0) return;
+      if (s.status === "active") {
+        stateRef.current = { ...s, status: "paused" };
+        syncState();
+      } else if (s.status === "paused") {
+        stateRef.current = { ...s, status: "active" };
+        syncState();
+      }
+    };
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  }, [syncState]);
+
+  // Persist run stats once on transition into game_over.
+  const savedRunRef = useRef(false);
+  useEffect(() => {
+    if (renderState.status !== "game_over") {
+      savedRunRef.current = false;
+      return;
+    }
+    if (savedRunRef.current) return;
+    savedRunRef.current = true;
+    saveRun({
+      wave: renderState.wave,
+      xp: renderState.xp,
+      level: renderState.level,
+      discoveries: loadDiscoveries(DISCOVERY_KEY).length,
+      endedAt: Date.now(),
+    });
+  }, [renderState.status, renderState.wave, renderState.xp, renderState.level]);
+
   const deployDefender = useCallback(
     (item: DeployableItem, arenaX: number, arenaY: number) => {
       const current = stateRef.current;
@@ -652,6 +710,8 @@ export function GameProvider({ children, onExit }: GameProviderProps) {
         startGame,
         resetGame,
         exitToMenu,
+        pauseGame,
+        resumeGame,
         deployDefender,
         removeFromCraft,
         applyUpgrade,
