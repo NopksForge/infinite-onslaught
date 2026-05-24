@@ -19,7 +19,13 @@ export type Defender = {
   attackDamage: number;
   spellArea: number; // % radius (spell type only)
   spellApplied: boolean; // true once spell damage dealt
+  /** Seconds remaining of the white "hit" flash. */
+  hitFlash: number;
+  /** Seconds remaining of the death fade-out (0 = alive). */
+  dying: number;
 };
+
+export type MonsterBehavior = "straight" | "zigzag" | "flying";
 
 export type Monster = {
   id: string;
@@ -32,9 +38,37 @@ export type Monster = {
   xpReward: number;
   x: number; // 0–100
   y: number; // 0–100
+  behavior: MonsterBehavior;
+  isBoss: boolean;
+  /** Anchor x for zigzag oscillation. */
+  baseX: number;
+  /** Per-instance phase offset (radians) so zigzag patterns desync. */
+  zigPhase: number;
+  /** Seconds since this monster spawned (used by zigzag). */
+  age: number;
+  /** Seconds remaining of the white "hit" flash. */
+  hitFlash: number;
+  /** Seconds remaining of the death fade (0 = alive, >0 = dying, non-colliding). */
+  dying: number;
 };
 
-export type MonsterTemplate = Omit<Monster, "id" | "x" | "y">;
+/** Template stored in the spawn queue. Per-instance fields (id/x/y/age/hitFlash/
+ * dying/baseX/zigPhase) are filled in when the monster actually spawns. */
+export type MonsterTemplate = Omit<
+  Monster,
+  "id" | "x" | "y" | "baseX" | "zigPhase" | "age" | "hitFlash" | "dying"
+>;
+
+export type Projectile = {
+  id: string;
+  x: number;
+  y: number;
+  targetId: string;
+  damage: number;
+  speed: number; // %/s
+  /** Tailwind color class fragment (e.g. "blue-400"). */
+  color: string;
+};
 
 export type GameStatus = "idle" | "active" | "paused" | "game_over";
 
@@ -73,8 +107,11 @@ export type GameState = {
   level: number;
   baseHp: number;
   maxBaseHp: number;
+  mana: number;
+  maxMana: number;
   defenders: Defender[];
   monsters: Monster[];
+  projectiles: Projectile[];
   waveTimer: number; // seconds until next wave spawns
   spawnTimer: number; // seconds until next monster from queue spawns
   spawnQueue: MonsterTemplate[];
@@ -82,6 +119,8 @@ export type GameState = {
   modalQueue: ModalKind[];
   /** Active upgrade multipliers — applied when new defenders are built. */
   upgrades: UpgradeStacks;
+  /** Seconds remaining of arena shake (set when the base is hit). */
+  baseShake: number;
 };
 
 /** Item data needed to create a defender when dropped onto the arena. */

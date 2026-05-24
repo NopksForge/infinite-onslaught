@@ -2,10 +2,11 @@ import { useGame } from "../../game/gameContext";
 
 export function HUD() {
   const { gameState, xpProgress, pauseGame, resumeGame } = useGame();
-  const { status, level, xp, baseHp, maxBaseHp } = gameState;
+  const { status, level, xp, baseHp, maxBaseHp, mana, maxMana } = gameState;
   const { current: xpCurrent, needed: xpNeeded } = xpProgress;
   const xpPct = xpNeeded > 0 ? (xpCurrent / xpNeeded) * 100 : 0;
   const hpPct = maxBaseHp > 0 ? (baseHp / maxBaseHp) * 100 : 0;
+  const manaPct = maxMana > 0 ? (mana / maxMana) * 100 : 0;
   const canPause = status === "active" || status === "paused";
 
   return (
@@ -31,6 +32,21 @@ export function HUD() {
           {xpCurrent} / {xpNeeded}
         </span>
         <span className="text-[10px] text-zinc-500">(total {xp})</span>
+      </div>
+
+      <div className="flex items-center gap-2">
+        <span className="text-xs font-semibold uppercase tracking-wide text-sky-300">
+          Mana
+        </span>
+        <div className="relative h-2 w-24 overflow-hidden rounded-full bg-zinc-800">
+          <div
+            className="absolute inset-y-0 left-0 bg-linear-to-r from-sky-400 to-indigo-500 transition-all"
+            style={{ width: `${manaPct}%` }}
+          />
+        </div>
+        <span className="rounded bg-zinc-800 px-2 py-1 text-xs text-sky-200">
+          {Math.floor(mana)} / {maxMana}
+        </span>
       </div>
 
       <div className="flex items-center gap-2">

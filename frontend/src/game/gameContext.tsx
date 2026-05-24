@@ -6,6 +6,12 @@ import {
   useRef,
   useState,
 } from "react";
+import {
+  BASE_DEFENDER,
+  MANA_COST,
+  MANA_REGEN_PER_SEC,
+  MAX_MANA,
+} from "./defenderStats";
 import type { DefenderStats, DefenderType } from "../components/Crafting/types";
 import {
   DISCOVERY_KEY,
@@ -18,7 +24,9 @@ import type {
   GameState,
   ModalKind,
   Monster,
+  MonsterBehavior,
   MonsterTemplate,
+  Projectile,
   Upgrade,
   UpgradeId,
   UpgradeStacks,
@@ -29,9 +37,18 @@ import type {
 const FIRST_WAVE_DELAY = 12; // seconds before first wave
 const WAVE_INTERVAL = 25; // seconds between waves
 const SPAWN_INTERVAL = 1.5; // seconds between individual monster spawns
+const BOSS_SPAWN_INTERVAL = 0; // boss waves spawn instantly
 const BASE_Y = 88; // y% at which monsters hit the player base
 const NEW_ELEMENT_EVERY = 3; // levels between NewElement modal triggers
 const INITIAL_BASE_HP = 100;
+const BOSS_WAVE_EVERY = 5; // every Nth wave is a boss wave
+const PROJECTILE_SPEED = 70; // %/s — fast enough to read but not instant
+const PROJECTILE_HIT_RADIUS = 2; // % distance at which a projectile connects
+const HIT_FLASH_DURATION = 0.15; // seconds
+const DEATH_FADE_DURATION = 0.35; // seconds
+const BASE_SHAKE_DURATION = 0.35; // seconds
+const ZIGZAG_AMPLITUDE = 12; // % horizontal swing
+const ZIGZAG_FREQUENCY = 2.2; // radians/sec
 
 const NEUTRAL_STACKS: UpgradeStacks = {
   speedMult: 1,
@@ -115,59 +132,25 @@ function applyUpgradeToStacks(
   }
 }
 
-/** Base stats for each defender type (multiplied by item stats). */
-const BASE_DEFENDER: Record<
-  DefenderType,
-  {
-    hp: number;
-    moveSpeed: number;
-    attackRange: number;
-    attackDamage: number;
-    lifetime: number;
-    spellArea: number;
-  }
-> = {
-  alive_melee: {
-    hp: 100,
-    moveSpeed: 22,
-    attackRange: 5,
-    attackDamage: 14,
-    lifetime: 28,
-    spellArea: 0,
-  },
-  alive_range: {
-    hp: 70,
-    moveSpeed: 0,
-    attackRange: 22,
-    attackDamage: 11,
-    lifetime: 22,
-    spellArea: 0,
-  },
-  spell: {
-    hp: 1,
-    moveSpeed: 0,
-    attackRange: 0,
-    attackDamage: 70,
-    lifetime: 0.8,
-    spellArea: 13,
-  },
-  obstacle: {
-    hp: 280,
-    moveSpeed: 0,
-    attackRange: 4,
-    attackDamage: 4,
-    lifetime: 45,
-    spellArea: 0,
-  },
-};
-
-/** Monster templates by tier (chosen by wave number). */
-const MONSTER_TIERS: MonsterTemplate[] = [
+/** Base monster templates (per tier). Wave generation derives the actual swarm
+ * and scales HP/speed/damage by wave number. */
+const MONSTER_TIERS: Omit<MonsterTemplate, "behavior" | "isBoss">[] = [
   { name: "Goblin", emoji: "👺", hp: 30, maxHp: 30, speed: 8, damage: 8, xpReward: 10 },
   { name: "Orc", emoji: "👹", hp: 70, maxHp: 70, speed: 6, damage: 15, xpReward: 22 },
   { name: "Troll", emoji: "🧌", hp: 160, maxHp: 160, speed: 5, damage: 25, xpReward: 45 },
   { name: "Dragon", emoji: "🐉", hp: 380, maxHp: 380, speed: 7, damage: 55, xpReward: 90 },
 ];
+
+/** Single boss template — scaled per wave for boss waves. */
+const BOSS_TEMPLATE: Omit<MonsterTemplate, "behavior" | "isBoss"> = {
+  name: "Behemoth",
+  emoji: "💀",
+  hp: 1200,
+  maxHp: 1200,
+  speed: 3.2,
+  damage: 80,
+  xpReward: 400,
+};
 
 // XP needed to reach level N (cumulative): level * (level-1) * 60
 function xpForLevel(n: number): number {
@@ -197,13 +180,17 @@ function initialState(): GameState {
     level: 1,
     baseHp: INITIAL_BASE_HP,
     maxBaseHp: INITIAL_BASE_HP,
+    mana: MAX_MANA,
+    maxMana: MAX_MANA,
     defenders: [],
     monsters: [],
+    projectiles: [],
     waveTimer: FIRST_WAVE_DELAY,
     spawnTimer: 0,
     spawnQueue: [],
     modalQueue: [],
     upgrades: { ...NEUTRAL_STACKS },
+    baseShake: 0,
   };
 }
 
@@ -247,10 +234,51 @@ function buildDefender(
     attackDamage: base.attackDamage * stats.damage_mult * upgrades.damageMult,
     spellArea: base.spellArea * stats.area_mult * upgrades.areaMult,
     spellApplied: false,
+    hitFlash: 0,
+    dying: 0,
   };
 }
 
+/** Pick a movement behavior for a non-boss monster based on the wave number. */
+function rollBehavior(wave: number): MonsterBehavior {
+  // Waves 1–2: straight only. From wave 3+ zigzag/flying start mixing in.
+  if (wave < 3) return "straight";
+  const r = Math.random();
+  // Heavier on straight early, ramping variety up to wave 8.
+  const varietyChance = Math.min(0.55, 0.15 + (wave - 3) * 0.05);
+  if (r < varietyChance) {
+    // 60/40 split between zigzag and flying once variety triggers.
+    return Math.random() < 0.6 ? "zigzag" : "flying";
+  }
+  return "straight";
+}
+
 function generateWave(wave: number): MonsterTemplate[] {
+  // Boss waves: one chunky enemy instead of a swarm.
+  if (wave > 0 && wave % BOSS_WAVE_EVERY === 0) {
+    const tier = Math.min(
+      Math.floor((wave - 1) / 2),
+      MONSTER_TIERS.length - 1
+    );
+    // Bosses scale by wave, lightly tinted by current tier so later bosses
+    // visually escalate (different emoji not strictly needed, scale is enough).
+    const bossScale = Math.pow(1.15, wave - 1);
+    const tierName = MONSTER_TIERS[tier].name;
+    return [
+      {
+        name: `${tierName} Behemoth`,
+        emoji: BOSS_TEMPLATE.emoji,
+        hp: Math.round(BOSS_TEMPLATE.hp * bossScale),
+        maxHp: Math.round(BOSS_TEMPLATE.hp * bossScale),
+        speed: parseFloat((BOSS_TEMPLATE.speed * Math.pow(1.02, wave - 1)).toFixed(2)),
+        damage: Math.round(BOSS_TEMPLATE.damage * bossScale),
+        xpReward: Math.round(BOSS_TEMPLATE.xpReward * Math.pow(1.08, wave - 1)),
+        behavior: "straight",
+        isBoss: true,
+      },
+    ];
+  }
+
   const tierIdx = Math.min(Math.floor((wave - 1) / 2), MONSTER_TIERS.length - 1);
   const base = MONSTER_TIERS[tierIdx];
   const scale = Math.pow(1.1, wave - 1);
@@ -268,7 +296,24 @@ function generateWave(wave: number): MonsterTemplate[] {
     speed,
     damage,
     xpReward,
+    behavior: rollBehavior(wave),
+    isBoss: false,
   }));
+}
+
+function templateToMonster(t: MonsterTemplate): Monster {
+  const spawnX = 5 + Math.random() * 90;
+  return {
+    ...t,
+    id: crypto.randomUUID(),
+    x: spawnX,
+    y: 0,
+    baseX: spawnX,
+    zigPhase: Math.random() * Math.PI * 2,
+    age: 0,
+    hitFlash: 0,
+    dying: 0,
+  };
 }
 
 // ── Game tick (pure function) ─────────────────────────────────────────────────
@@ -278,10 +323,27 @@ function gameTick(state: GameState, dt: number): GameState {
   // Freeze the world while any modal is pending.
   if (state.modalQueue.length > 0) return state;
 
-  let { wave, xp, level, baseHp, waveTimer, spawnTimer, spawnQueue } = state;
+  let {
+    wave,
+    xp,
+    level,
+    baseHp,
+    waveTimer,
+    spawnTimer,
+    spawnQueue,
+    mana,
+    baseShake,
+  } = state;
   const defenders: Defender[] = state.defenders.map((d) => ({ ...d }));
   const monsters: Monster[] = state.monsters.map((m) => ({ ...m }));
+  const projectiles: Projectile[] = state.projectiles.map((p) => ({ ...p }));
   const newMonsters: Monster[] = [];
+  const newProjectiles: Projectile[] = [];
+
+  // Mana regen
+  mana = Math.min(state.maxMana, mana + MANA_REGEN_PER_SEC * dt);
+  // Base shake decay
+  baseShake = Math.max(0, baseShake - dt);
 
   // 1. Wave timer → spawn next wave
   waveTimer = waveTimer - dt;
@@ -294,34 +356,67 @@ function gameTick(state: GameState, dt: number): GameState {
 
   // 2. Spawn from queue
   let newSpawnQueue = [...spawnQueue];
+  const isBossWave =
+    wave > 0 && wave % BOSS_WAVE_EVERY === 0 && newSpawnQueue.length > 0;
   spawnTimer = spawnTimer - dt;
   if (spawnTimer <= 0 && newSpawnQueue.length > 0) {
     const template = newSpawnQueue.shift()!;
-    newMonsters.push({
-      ...template,
-      id: crypto.randomUUID(),
-      x: 5 + Math.random() * 90,
-      y: 0,
-    });
-    spawnTimer = SPAWN_INTERVAL;
+    newMonsters.push(templateToMonster(template));
+    spawnTimer = isBossWave ? BOSS_SPAWN_INTERVAL : SPAWN_INTERVAL;
   }
 
   const allMonsters: Monster[] = [...monsters, ...newMonsters];
   const deadMonsterIds = new Set<string>();
   let xpGained = 0;
 
-  // 3. Move monsters toward base
+  /** Apply damage to a monster, kicking off the flash + (on kill) the death
+   * fade. Monsters that are already dying ignore further damage. */
+  const damageMonster = (m: Monster, amount: number): void => {
+    if (m.dying > 0 || deadMonsterIds.has(m.id)) return;
+    m.hp -= amount;
+    m.hitFlash = HIT_FLASH_DURATION;
+    if (m.hp <= 0) {
+      m.hp = 0;
+      m.dying = DEATH_FADE_DURATION;
+      deadMonsterIds.add(m.id);
+      xpGained += m.xpReward;
+    }
+  };
+
+  // 3. Move + tick monsters
   for (const m of allMonsters) {
+    m.age += dt;
+    m.hitFlash = Math.max(0, m.hitFlash - dt);
+    if (m.dying > 0) {
+      // Dying: keep falling at half speed but don't be targetable / collide.
+      m.dying = Math.max(0, m.dying - dt);
+      if (m.dying === 0) deadMonsterIds.add(m.id); // fade finished → cull below
+      m.y += m.speed * dt * 0.5;
+      continue;
+    }
     m.y += m.speed * dt;
+    if (m.behavior === "zigzag") {
+      m.x = m.baseX + Math.sin(m.age * ZIGZAG_FREQUENCY + m.zigPhase) * ZIGZAG_AMPLITUDE;
+      m.x = Math.max(2, Math.min(98, m.x));
+    }
+    // flying & straight: no horizontal drift. (flying is distinguished only by
+    // immunity to obstacle damage, handled below.)
   }
 
   // 4. Process defenders
   const deadDefenderIds = new Set<string>();
 
   for (const d of defenders) {
+    d.hitFlash = Math.max(0, d.hitFlash - dt);
+    if (d.dying > 0) {
+      d.dying = Math.max(0, d.dying - dt);
+      if (d.dying === 0) deadDefenderIds.add(d.id);
+      continue;
+    }
+
     d.lifetime -= dt;
     if (d.lifetime <= 0) {
-      deadDefenderIds.add(d.id);
+      d.dying = DEATH_FADE_DURATION;
       continue;
     }
     d.attackCooldown = Math.max(0, d.attackCooldown - dt);
@@ -330,12 +425,9 @@ function gameTick(state: GameState, dt: number): GameState {
       if (!d.spellApplied) {
         d.spellApplied = true;
         for (const m of allMonsters) {
+          if (m.dying > 0) continue;
           if (dist(d.x, d.y, m.x, m.y) <= d.spellArea) {
-            m.hp -= d.attackDamage;
-            if (m.hp <= 0 && !deadMonsterIds.has(m.id)) {
-              deadMonsterIds.add(m.id);
-              xpGained += m.xpReward;
-            }
+            damageMonster(m, d.attackDamage);
           }
         }
       }
@@ -343,32 +435,36 @@ function gameTick(state: GameState, dt: number): GameState {
     }
 
     if (d.type === "obstacle") {
-      // Damage monsters in contact range
+      // Damage non-flying monsters in contact range
       if (d.attackCooldown === 0) {
         for (const m of allMonsters) {
+          if (m.dying > 0) continue;
+          if (m.behavior === "flying") continue;
           if (dist(d.x, d.y, m.x, m.y) <= d.attackRange) {
-            m.hp -= d.attackDamage;
-            if (m.hp <= 0 && !deadMonsterIds.has(m.id)) {
-              deadMonsterIds.add(m.id);
-              xpGained += m.xpReward;
-            }
+            damageMonster(m, d.attackDamage);
           }
         }
         d.attackCooldown = 0.5;
       }
-      // Take damage from monsters in contact
+      // Take damage from non-flying monsters in contact
       for (const m of allMonsters) {
-        if (!deadMonsterIds.has(m.id) && dist(d.x, d.y, m.x, m.y) <= d.attackRange + 1) {
+        if (m.dying > 0) continue;
+        if (m.behavior === "flying") continue;
+        if (dist(d.x, d.y, m.x, m.y) <= d.attackRange + 1) {
           d.hp -= m.damage * dt * 0.3;
+          d.hitFlash = HIT_FLASH_DURATION;
         }
       }
-      if (d.hp <= 0) deadDefenderIds.add(d.id);
+      if (d.hp <= 0) {
+        d.hp = 0;
+        d.dying = DEATH_FADE_DURATION;
+      }
       continue;
     }
 
-    // alive_melee: move toward nearest monster, attack in range
+    // alive_melee: move toward nearest live monster, attack in range
     if (d.type === "alive_melee") {
-      const alive = allMonsters.filter((m) => !deadMonsterIds.has(m.id));
+      const alive = allMonsters.filter((m) => m.dying === 0);
       if (alive.length > 0) {
         let nearest = alive[0];
         let nearestDist = dist(d.x, d.y, nearest.x, nearest.y);
@@ -388,21 +484,17 @@ function gameTick(state: GameState, dt: number): GameState {
           d.x = Math.max(0, Math.min(100, d.x));
           d.y = Math.max(0, Math.min(100, d.y));
         } else if (d.attackCooldown === 0) {
-          nearest.hp -= d.attackDamage;
+          damageMonster(nearest, d.attackDamage);
           d.attackCooldown = 1.2;
-          if (nearest.hp <= 0 && !deadMonsterIds.has(nearest.id)) {
-            deadMonsterIds.add(nearest.id);
-            xpGained += nearest.xpReward;
-          }
         }
       }
     }
 
-    // alive_range: stationary, attack nearest monster in range
+    // alive_range: stationary, spawn a projectile toward nearest target in range
     if (d.type === "alive_range") {
       if (d.attackCooldown === 0) {
         const inRange = allMonsters.filter(
-          (m) => !deadMonsterIds.has(m.id) && dist(d.x, d.y, m.x, m.y) <= d.attackRange
+          (m) => m.dying === 0 && dist(d.x, d.y, m.x, m.y) <= d.attackRange
         );
         if (inRange.length > 0) {
           let nearest = inRange[0];
@@ -414,27 +506,58 @@ function gameTick(state: GameState, dt: number): GameState {
               nearest = m;
             }
           }
-          nearest.hp -= d.attackDamage;
+          newProjectiles.push({
+            id: crypto.randomUUID(),
+            x: d.x,
+            y: d.y,
+            targetId: nearest.id,
+            damage: d.attackDamage,
+            speed: PROJECTILE_SPEED,
+            color: "blue-400",
+          });
           d.attackCooldown = 1.5;
-          if (nearest.hp <= 0 && !deadMonsterIds.has(nearest.id)) {
-            deadMonsterIds.add(nearest.id);
-            xpGained += nearest.xpReward;
-          }
         }
       }
     }
+  }
+
+  // 4b. Move projectiles; resolve hits
+  const allProjectiles = [...projectiles, ...newProjectiles];
+  const liveProjectiles: Projectile[] = [];
+  const monsterById = new Map<string, Monster>();
+  for (const m of allMonsters) monsterById.set(m.id, m);
+  for (const p of allProjectiles) {
+    const target = monsterById.get(p.targetId);
+    // Target gone or already dying — projectile fizzles.
+    if (!target || target.dying > 0) continue;
+    const dx = target.x - p.x;
+    const dy = target.y - p.y;
+    const len = Math.sqrt(dx * dx + dy * dy) || 1;
+    const step = p.speed * dt;
+    if (len <= step + PROJECTILE_HIT_RADIUS) {
+      // Hit
+      damageMonster(target, p.damage);
+      continue;
+    }
+    p.x += (dx / len) * step;
+    p.y += (dy / len) * step;
+    // Cull off-arena projectiles defensively
+    if (p.x < -5 || p.x > 105 || p.y < -5 || p.y > 105) continue;
+    liveProjectiles.push(p);
   }
 
   // 5. Monsters that reach the base deal damage
   let baseDamage = 0;
   const reachedBase = new Set<string>();
   for (const m of allMonsters) {
-    if (m.y >= BASE_Y && !deadMonsterIds.has(m.id)) {
+    if (m.dying > 0) continue;
+    if (m.y >= BASE_Y) {
       baseDamage += m.damage;
       reachedBase.add(m.id);
     }
   }
   const newBaseHp = Math.max(0, baseHp - baseDamage);
+  if (baseDamage > 0) baseShake = BASE_SHAKE_DURATION;
 
   // 6. XP + level
   const newXp = xp + xpGained;
@@ -453,12 +576,17 @@ function gameTick(state: GameState, dt: number): GameState {
   }
 
   // 7. Filter dead entities
+  // - Monsters: remove once dying fade has finished OR they reached the base.
+  //   Keep them around (visible but faded) while dying > 0.
   const liveDefenders = defenders.filter(
     (d) => !deadDefenderIds.has(d.id)
   );
-  const liveMonsters = allMonsters.filter(
-    (m) => !deadMonsterIds.has(m.id) && !reachedBase.has(m.id)
-  );
+  const liveMonsters = allMonsters.filter((m) => {
+    if (reachedBase.has(m.id)) return false;
+    if (m.dying > 0) return true; // still fading out — keep rendering
+    if (deadMonsterIds.has(m.id)) return false; // shouldn't happen (dying set above)
+    return true;
+  });
 
   return {
     ...state,
@@ -466,12 +594,15 @@ function gameTick(state: GameState, dt: number): GameState {
     xp: newXp,
     level: newLevel,
     baseHp: newBaseHp,
+    mana,
     defenders: liveDefenders,
     monsters: liveMonsters,
+    projectiles: liveProjectiles,
     waveTimer,
     spawnTimer,
     spawnQueue: newSpawnQueue,
     modalQueue: newModalQueue,
+    baseShake,
     status: newBaseHp <= 0 ? "game_over" : "active",
   };
 }
@@ -492,7 +623,12 @@ type GameContextValue = {
   exitToMenu: () => void;
   pauseGame: () => void;
   resumeGame: () => void;
-  deployDefender: (item: DeployableItem, arenaX: number, arenaY: number) => void;
+  /** Returns true if the defender was deployed (mana sufficient + status ok). */
+  deployDefender: (
+    item: DeployableItem,
+    arenaX: number,
+    arenaY: number
+  ) => boolean;
   removeFromCraft: (id: string) => void;
   applyUpgrade: (id: UpgradeId) => void;
   /** Called by NewElement modal after the chosen element has been persisted. */
@@ -640,14 +776,20 @@ export function GameProvider({ children, onExit }: GameProviderProps) {
   }, [renderState.status, renderState.wave, renderState.xp, renderState.level]);
 
   const deployDefender = useCallback(
-    (item: DeployableItem, arenaX: number, arenaY: number) => {
+    (item: DeployableItem, arenaX: number, arenaY: number): boolean => {
       const current = stateRef.current;
+      if (current.status === "game_over") return false;
+      const dtype: DefenderType = item.defender_type ?? "alive_melee";
+      const cost = MANA_COST[dtype];
+      if (current.mana < cost) return false;
       const defender = buildDefender(item, arenaX, arenaY, current.upgrades);
       stateRef.current = {
         ...current,
+        mana: current.mana - cost,
         defenders: [...current.defenders, defender],
       };
       syncState();
+      return true;
     },
     [syncState]
   );
